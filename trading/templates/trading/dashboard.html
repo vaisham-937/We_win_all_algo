@@ -1,0 +1,280 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Algo Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .search-results::-webkit-scrollbar { width: 8px; }
+        .search-results::-webkit-scrollbar-track { background: #1f2937; }
+        .search-results::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        .dot { top: 0.25rem; left: 0.25rem; transition: all 0.3s ease-in-out; }
+        input:checked ~ .dot { transform: translateX(100%); }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen p-6 relative font-sans">
+    <div class="max-w-7xl mx-auto space-y-6">
+        
+        <!-- HEADER -->
+        <header class="flex flex-col md:flex-row justify-between items-center bg-gray-800 p-5 rounded-xl shadow-lg border border-gray-700 space-y-4 md:space-y-0">
+            <div>
+                <h1 class="text-2xl font-bold text-white tracking-wide">Algo Dashboard <span class="text-indigo-400">| {{ user.username }}</span></h1>
+                <div class="flex items-center mt-3 bg-gray-900 p-2 rounded-lg border border-gray-700 inline-flex">
+                    <label for="killSwitch" class="flex items-center cursor-pointer relative">
+                        <input type="checkbox" id="killSwitch" class="sr-only" {% if account.is_live_trading_enabled %}checked{% endif %} onchange="toggleKillSwitch()">
+                        <div class="w-14 h-7 bg-gray-700 rounded-full shadow-inner transition-colors duration-300 ease-in-out" id="toggleRail"></div>
+                        <div class="dot absolute w-5 h-5 bg-white rounded-full shadow transition-transform duration-300 ease-in-out" id="toggleKnob"></div>
+                    </label>
+                    <div class="ml-3 font-bold text-sm tracking-wider" id="statusLabel">
+                        {% if account.is_live_trading_enabled %}
+                            <span class="text-green-400 drop-shadow-[0_0_5px_rgba(74,222,128,0.5)]">LIVE TRADING ON</span>
+                        {% else %}
+                            <span class="text-red-500 drop-shadow-[0_0_5px_rgba(248,113,113,0.5)]">STOPPED (KILL SWITCH)</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="flex space-x-3">
+                <button onclick="openModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg flex items-center shadow-lg transition transform hover:scale-105">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg> Add Scrips
+                </button>
+                <a href="{% url 'credentials' %}" class="bg-gray-700 hover:bg-gray-600 text-gray-200 px-5 py-2.5 rounded-lg shadow-lg border border-gray-600 transition">Settings</a>
+            </div>
+            <a href="{% url 'logout' %}" class="bg-red-600/20 text-orange-400 hover:bg-red-600 hover:text-white px-3 py-2 rounded-lg transition text-sm font-bold border border-red-900/50">
+    Logout
+</a>
+        </header>
+
+        <!-- STATS -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-gray-800 p-6 rounded-xl shadow-lg border-l-4 border-green-500 border border-gray-700">
+                <h3 class="text-gray-400 text-sm font-medium uppercase tracking-wider">Realized P&L (Today)</h3>
+                <p class="text-4xl font-extrabold text-white mt-2">₹ {{ realized_pnl }}</p>
+            </div>
+            <div class="bg-gray-800 p-6 rounded-xl shadow-lg border-l-4 border-yellow-500 border border-gray-700">
+                <h3 class="text-gray-400 text-sm font-medium uppercase tracking-wider">Unrealized P&L (Open)</h3>
+                <p class="text-4xl font-extrabold text-white mt-2" id="unrealized_pnl">Loading...</p>
+            </div>
+        </div>
+
+        <!-- POSITIONS TABLE -->
+        <div class="bg-gray-800 rounded-xl shadow-lg border border-gray-700 overflow-hidden">
+            <div class="p-5 border-b border-gray-700 bg-gray-800">
+                <h2 class="text-xl font-bold text-gray-100">Open Positions</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-700">
+                    <thead class="bg-gray-900">
+                        <tr>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Symbol</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Type</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Entry</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">LTP</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">P&L</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-gray-800 divide-y divide-gray-700">
+                        {% for pos in open_positions %}
+                        <tr class="hover:bg-gray-700 transition">
+                            <td class="px-6 py-4 font-medium text-white">{{ pos.symbol.symbol }}</td>
+                            <td class="px-6 py-4 {{ pos.trade_type|yesno:'text-green-400,text-red-400' }} font-bold">{{ pos.trade_type }}</td>
+                            <td class="px-6 py-4 text-gray-300">{{ pos.entry_price }}</td>
+                            <td class="px-6 py-4 text-gray-300 ltp-val" data-token="{{ pos.symbol.instrument_token }}">--</td>
+                            <td class="px-6 py-4 font-bold pnl-val" data-token="{{ pos.symbol.instrument_token }}">--</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="px-6 py-8 text-center text-gray-500 italic">No open positions.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- WATCHLIST TABLE (Updated with Delete Button) -->
+        <div class="bg-gray-800 rounded-xl shadow-lg border border-gray-700 overflow-hidden mt-6">
+            <div class="p-5 border-b border-gray-700 bg-gray-800 flex justify-between items-center">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-100">Active Watchlist</h2>
+                    <p class="text-xs text-gray-500 mt-1">Symbols being monitored.</p>
+                </div>
+                <span class="bg-gray-700 text-indigo-300 text-xs font-bold px-3 py-1 rounded-full border border-gray-600">{{ active_scrips|length }} Scrips</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-700">
+                    <thead class="bg-gray-900">
+                        <tr>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Symbol</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Exchange</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Qty / Lot</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Status</th>
+                            <!-- New Action Column -->
+                            <th class="px-6 py-4 text-right text-xs font-bold text-gray-400 uppercase">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-gray-800 divide-y divide-gray-700">
+                        {% for scrip in active_scrips %}
+                        <tr class="hover:bg-gray-700 transition duration-150" id="row-{{ scrip.id }}">
+                            <td class="px-6 py-4 font-bold text-white">{{ scrip.symbol }}</td>
+                            <td class="px-6 py-4 text-sm text-gray-400">{{ scrip.exchange }} ({{ scrip.segment }})</td>
+                            <td class="px-6 py-4 text-sm text-gray-300">{{ scrip.absolute_quantity }}</td>
+                            <td class="px-6 py-4">
+                                <span class="px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full bg-green-900 text-green-300 border border-green-700">Monitoring</span>
+                            </td>
+                            <!-- Delete Button -->
+                            <td class="px-6 py-4 text-right">
+                                <button onclick="removeScrip({{ scrip.id }})" class="text-red-400 hover:text-red-200 bg-red-900/30 hover:bg-red-900/50 p-2 rounded-full transition" title="Remove Symbol">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="px-6 py-8 text-center text-gray-500 italic">No scrips added yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADD SYMBOL MODAL -->
+    <div id="addSymbolModal" class="fixed inset-0 bg-black bg-opacity-70 hidden flex items-center justify-center z-50 backdrop-blur-sm">
+        <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl mx-4 border border-gray-700 overflow-hidden">
+            <div class="p-6 border-b border-gray-700 flex justify-between items-center bg-gray-900">
+                <h2 class="text-xl font-bold text-white">Add New Scrip</h2>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-white text-2xl font-bold">&times;</button>
+            </div>
+            <div class="p-6">
+                <input type="text" id="searchInput" placeholder="Search (e.g. RELIANCE)..." class="w-full bg-gray-700 border border-gray-600 text-white p-4 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" autocomplete="off">
+                <div id="searchResults" class="mt-2 border border-gray-600 rounded-lg max-h-60 overflow-y-auto hidden bg-gray-800 search-results"></div>
+                <div id="modalMsg" class="mt-4 p-4 rounded-lg hidden text-center font-bold"></div>
+            </div>
+            <div class="p-4 bg-gray-900 text-right border-t border-gray-700">
+                <button onclick="closeModal()" class="px-5 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 font-medium">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- REMOVE SYMBOL LOGIC ---
+        async function removeScrip(id) {
+            if(!confirm("Are you sure you want to remove this stock from monitoring?")) return;
+            try {
+                const res = await fetch('/api/remove-symbol/', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id })
+                });
+                const data = await res.json();
+                
+                if(data.status === 'success') {
+                    // Remove row from table without reload
+                    document.getElementById(`row-${id}`).remove();
+                } else {
+                    alert("Error: " + data.message);
+                }
+            } catch(e) { alert("Network Error"); }
+        }
+
+        // --- KILL SWITCH LOGIC ---
+        async function toggleKillSwitch() {
+            const checkbox = document.getElementById('killSwitch');
+            updateToggleUI(checkbox.checked);
+            try {
+                const res = await fetch('/api/toggle-kill-switch/', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    checkbox.checked = data.is_enabled;
+                    updateToggleUI(data.is_enabled);
+                } else {
+                    alert("Error: " + data.message);
+                    checkbox.checked = !checkbox.checked;
+                    updateToggleUI(checkbox.checked);
+                }
+            } catch (err) { checkbox.checked = !checkbox.checked; updateToggleUI(checkbox.checked); }
+        }
+
+        function updateToggleUI(isChecked) {
+            const label = document.getElementById('statusLabel');
+            const rail = document.getElementById('toggleRail');
+            const knob = document.getElementById('toggleKnob');
+            if (isChecked) {
+                rail.classList.remove('bg-red-900'); rail.classList.add('bg-green-600');
+                knob.style.transform = 'translateX(100%)';
+                label.innerHTML = '<span class="text-green-400 drop-shadow-[0_0_5px_rgba(74,222,128,0.5)]">LIVE TRADING ON</span>';
+            } else {
+                rail.classList.remove('bg-green-600'); rail.classList.add('bg-red-900');
+                knob.style.transform = 'translateX(0)';
+                label.innerHTML = '<span class="text-red-500 drop-shadow-[0_0_5px_rgba(248,113,113,0.5)]">STOPPED (KILL SWITCH)</span>';
+            }
+        }
+        document.addEventListener('DOMContentLoaded', () => { updateToggleUI(document.getElementById('killSwitch').checked); });
+
+        // --- MODAL & SEARCH LOGIC ---
+        const modal = document.getElementById('addSymbolModal');
+        const searchInput = document.getElementById('searchInput');
+        const searchResults = document.getElementById('searchResults');
+        const modalMsg = document.getElementById('modalMsg');
+        let debounceTimer;
+
+        function openModal() { modal.classList.remove('hidden'); searchInput.focus(); }
+        function closeModal() { modal.classList.add('hidden'); searchInput.value=''; searchResults.classList.add('hidden'); modalMsg.classList.add('hidden'); }
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(debounceTimer);
+            const query = e.target.value;
+            if(query.length < 2) { searchResults.classList.add('hidden'); return; }
+            debounceTimer = setTimeout(async () => {
+                const res = await fetch(`/api/search-instruments/?q=${query}`);
+                const data = await res.json();
+                searchResults.innerHTML = '';
+                if (data.length === 0) searchResults.innerHTML = '<div class="p-4 text-gray-500 text-center">No results.</div>';
+                else data.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'p-4 hover:bg-gray-700 cursor-pointer border-b border-gray-700 flex justify-between items-center';
+                    div.innerHTML = `<div><span class="font-bold text-white text-lg">${item.value.symbol}</span><span class="text-xs bg-gray-900 text-gray-300 px-2 py-1 rounded ml-2 border border-gray-600">${item.value.exchange}</span></div><button class="text-sm bg-indigo-600 text-white px-3 py-1.5 rounded hover:bg-indigo-500">Add +</button>`;
+                    div.onclick = () => addSymbolToDB(item.value);
+                    searchResults.appendChild(div);
+                });
+                searchResults.classList.remove('hidden');
+            }, 300);
+        });
+
+        async function addSymbolToDB(instr) {
+            searchResults.classList.add('hidden'); searchInput.value = '';
+            const res = await fetch('/api/add-symbol/', {
+                method: 'POST', body: JSON.stringify({instrument: instr}),
+                headers: { 'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json' }
+            });
+            const resp = await res.json();
+            modalMsg.textContent = resp.message;
+            modalMsg.className = `mt-4 p-4 rounded-lg font-bold ${resp.status === 'success' ? 'bg-green-900 text-green-200 border border-green-700' : 'bg-red-900 text-red-200 border border-red-700'}`;
+            modalMsg.classList.remove('hidden');
+            if(resp.status === 'success') setTimeout(() => location.reload(), 1500);
+            else setTimeout(() => modalMsg.classList.add('hidden'), 3000);
+        }
+
+        // --- PNL LOGIC ---
+        const unrealizedPnlElement = document.getElementById('unrealized_pnl');
+        async function fetchPnl() {
+            try {
+                const response = await fetch('{% url "api_pnl" %}');
+                if(response.ok) {
+                    const data = await response.json();
+                    let pnl = data.total_unrealized_pnl;
+                    unrealizedPnlElement.innerText = `₹ ${pnl}`;
+                    unrealizedPnlElement.className = `text-4xl font-extrabold mt-2 ${pnl > 0 ? 'text-green-400' : (pnl < 0 ? 'text-red-400' : 'text-white')}`;
+                }
+            } catch (e) {}
+        }
+        setInterval(fetchPnl, 2000); fetchPnl();
+    </script>
+</body>
+</html>

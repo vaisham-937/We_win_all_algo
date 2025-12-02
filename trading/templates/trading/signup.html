@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verified Signup</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Outfit', sans-serif; }
+        .glass-effect { background: rgba(31, 41, 55, 0.7); backdrop-filter: blur(10px); }
+        .animate-fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-[#0f1115] text-white flex items-center justify-center min-h-screen relative overflow-hidden">
+    
+    <div class="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
+        <div class="absolute top-10 left-10 w-72 h-72 bg-indigo-600/20 rounded-full blur-[100px]"></div>
+        <div class="absolute bottom-10 right-10 w-72 h-72 bg-green-600/20 rounded-full blur-[100px]"></div>
+    </div>
+
+    <div class="w-full max-w-lg p-8 rounded-2xl shadow-2xl border border-gray-800 glass-effect relative z-10 mx-4 my-8">
+        
+        <div class="text-center mb-6">
+            <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">Create Account</h1>
+            <p class="text-gray-500 text-sm mt-1">Email verification required.</p>
+        </div>
+
+        <!-- ERROR DISPLAY -->
+        {% if form.errors %}
+            <div class="bg-red-500/10 border border-red-500 text-red-200 p-4 rounded-lg mb-6 text-sm">
+                <div class="flex items-center mb-2">
+                    <span class="font-bold">Signup Failed</span>
+                </div>
+                <ul class="list-disc list-inside space-y-1">
+                    {% for field in form %}
+                        {% for error in field.errors %}
+                            <li><span class="font-bold capitalize">{{ field.label }}:</span> {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                    {% for error in form.non_field_errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+
+        <form method="POST" class="space-y-4" id="signupForm">
+            {% csrf_token %}
+            
+            <!-- Username -->
+            <div>
+                <label class="block text-gray-400 text-xs font-bold mb-1 ml-1">USERNAME</label>
+                <input type="text" name="username" class="w-full bg-[#161b22] border border-gray-700 rounded-lg px-4 py-3 focus:border-indigo-500 outline-none transition placeholder-gray-600" placeholder="Choose a username" required>
+            </div>
+
+            <!-- EMAIL VERIFICATION -->
+            <div class="bg-[#161b22]/50 p-4 rounded-xl border border-gray-700/50">
+                <label class="block text-gray-400 text-xs font-bold mb-1 ml-1">EMAIL ADDRESS</label>
+                <div class="flex space-x-2">
+                    <input type="email" name="email" id="emailInput" class="w-full bg-[#161b22] border border-gray-700 rounded-lg px-4 py-3 focus:border-indigo-500 outline-none transition placeholder-gray-600" placeholder="name@example.com" required>
+                    
+                    <button type="button" onclick="sendOTP()" id="btn-email-send" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 rounded-lg text-xs font-bold transition whitespace-nowrap shadow-lg">
+                        Verify
+                    </button>
+                    
+                    <span id="badge-email-verified" class="hidden bg-green-500/20 text-green-400 border border-green-500/50 px-3 py-3 rounded-lg flex items-center shadow-[0_0_10px_rgba(74,222,128,0.2)]">
+                        <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                        Verified
+                    </span>
+                </div>
+                
+                <!-- Hidden OTP Box -->
+                <div id="otp-box-email" class="hidden mt-3 flex space-x-2 animate-fade-in bg-gray-800/50 p-2 rounded-lg border border-gray-700">
+                    <input type="text" id="otp-input-email" placeholder="Enter Email OTP" class="w-full bg-transparent border-none text-white px-2 py-1 text-sm focus:ring-0 placeholder-gray-500">
+                    <button type="button" onclick="confirmOTP()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-md text-xs font-bold transition">Confirm</button>
+                </div>
+                <p id="otp-msg" class="text-[10px] text-gray-400 mt-2 ml-1 hidden">OTP sent to your email. Check inbox/spam.</p>
+            </div>
+
+            <!-- Phone Number -->
+            <div>
+                <label class="block text-gray-400 text-xs font-bold mb-1 ml-1">PHONE NUMBER</label>
+                <input type="text" name="phone_number" maxlength="10" class="w-full bg-[#161b22] border border-gray-700 rounded-lg px-4 py-3 focus:border-indigo-500 outline-none transition placeholder-gray-600" placeholder="9876543210" required>
+            </div>
+
+            <!-- Passwords (FIXED NAMES: password1, password2) -->
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-gray-400 text-xs font-bold mb-1 ml-1">PASSWORD</label>
+                    <input type="password" name="password1" class="w-full bg-[#161b22] border border-gray-700 rounded-lg px-4 py-3 focus:border-indigo-500 outline-none transition" required>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-xs font-bold mb-1 ml-1">CONFIRM</label>
+                    <input type="password" name="password2" class="w-full bg-[#161b22] border border-gray-700 rounded-lg px-4 py-3 focus:border-indigo-500 outline-none transition" required>
+                </div>
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit" id="submitBtn" disabled 
+                    class="w-full bg-gray-700 text-gray-400 font-bold py-3.5 rounded-xl shadow-lg mt-4 transition cursor-not-allowed border border-gray-600">
+                Verify Email First
+            </button>
+        </form>
+
+        <div class="mt-6 text-center border-t border-gray-800 pt-4">
+            <p class="text-gray-500 text-sm">Already verified? <a href="{% url 'login' %}" class="text-indigo-400 hover:text-white font-bold transition">Sign In</a></p>
+        </div>
+    </div>
+
+    <script>
+        async function sendOTP() {
+            const emailInput = document.getElementById('emailInput');
+            const btn = document.getElementById('btn-email-send');
+            const otpBox = document.getElementById('otp-box-email');
+            const msg = document.getElementById('otp-msg');
+
+            if(!emailInput.value.includes('@') || emailInput.value.length < 5) {
+                alert("Please enter a valid email address."); return;
+            }
+
+            btn.innerText = "Sending...";
+            btn.disabled = true;
+            btn.classList.add('opacity-70');
+
+            try {
+                const res = await fetch(`/api/send-otp/?target=email&value=${emailInput.value}`);
+                const data = await res.json();
+
+                if(data.status === 'success') {
+                    otpBox.classList.remove('hidden');
+                    msg.classList.remove('hidden');
+                    btn.classList.add('hidden');
+                } else {
+                    alert("Error: " + data.message);
+                    btn.innerText = "Retry";
+                    btn.disabled = false;
+                }
+            } catch(e) {
+                alert("Network Error.");
+                btn.innerText = "Retry";
+                btn.disabled = false;
+            }
+        }
+
+        async function confirmOTP() {
+            const otpVal = document.getElementById('otp-input-email').value;
+            
+            try {
+                const res = await fetch(`/api/verify-otp/?target=email&otp=${otpVal}`);
+                const data = await res.json();
+
+                if(data.status === 'success') {
+                    document.getElementById('otp-box-email').classList.add('hidden');
+                    document.getElementById('otp-msg').classList.add('hidden');
+                    document.getElementById('badge-email-verified').classList.remove('hidden');
+                    
+                    const emailInput = document.getElementById('emailInput');
+                    emailInput.classList.add('opacity-50', 'cursor-not-allowed');
+                    emailInput.readOnly = true;
+
+                    const btn = document.getElementById('submitBtn');
+                    btn.disabled = false;
+                    btn.classList.remove('bg-gray-700', 'text-gray-400', 'cursor-not-allowed', 'border-gray-600');
+                    btn.classList.add('bg-gradient-to-r', 'from-green-600', 'to-green-700', 'hover:from-green-500', 'text-white', 'transform', 'hover:scale-[1.01]', 'border-none');
+                    btn.innerText = "Create Trading Account";
+                } else {
+                    alert("Invalid OTP!");
+                }
+            } catch(e) { alert("Validation Error"); }
+        }
+    </script>
+</body>
+</html>
