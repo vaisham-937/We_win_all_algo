@@ -126,23 +126,27 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # --- REDIS CONFIGURATION (Cache & Message Broker) ---
-REDIS_HOST = 'localhost'
-REDIS_PORT = 6379
 
 CACHES = {
-    # Default cache used by Django
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/0",
-        "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
+        "LOCATION": "redis://127.0.0.1:6379/1",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
     },
-    # Dedicated cache for real-time market data ticks
+    # The 'ticks' cache must be defined for your code to work
     "ticks": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
-        "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
+        "LOCATION": "redis://127.0.0.1:6379/2", # Using DB 2 for ticks
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+             # IMPORTANT: If you use a prefix, keys('*') breaks. 
+             # But with the fix above (get_many), prefixes won't matter.
+        }
     }
 }
+
 
 # --- KITE CONNECT COMMON CONFIGURATION ---
 # Kite API key/secret are stored per-user, but the general redirect URL is global.

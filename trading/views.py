@@ -245,29 +245,34 @@ def dashboard_view(request):
         account = ClientAccount.objects.get(user=request.user)
     except ClientAccount.DoesNotExist:
         return redirect('credentials')
-    # A. Existing Features
+    
     today = timezone.now().date()
     trades_today = TradeLog.objects.filter(client_account=account, entry_time__date=today)
     realized_pnl = trades_today.filter(status='CLOSED').aggregate(Sum('realized_pnl'))['realized_pnl__sum'] or 0.0
     open_positions = trades_today.filter(status='OPEN').select_related('symbol')
     active_scrips = TradeSymbol.objects.filter(is_active=True)
-    # B. New Scanner Data (From Redis)
-    tick_cache = caches['ticks']
-    keys = tick_cache.keys("tick:*")
-    market_data = []
     
-    if keys:
-        raw_data = tick_cache.get_many(keys)
+    # --- REDIS FIX START ---
+    tick_cache = caches['ticks']
+    
+    # Generate list of keys from active scrips
+    request_keys = [f"tick:{s.instrument_token}" for s in active_scrips]
+    
+    market_data = []
+    if request_keys:
+        raw_data = tick_cache.get_many(request_keys)
         for key, val in raw_data.items():
-            try:
-                market_data.append(json.loads(val))
-            except: pass
-    # Sort Gainers/Losers based on % Change
+            if val:
+                try: market_data.append(json.loads(val))
+                except: pass
+    # --- REDIS FIX END ---
+
     gainers = sorted(market_data, key=lambda x: x.get('pct_change', 0), reverse=True)
     losers = sorted(market_data, key=lambda x: x.get('pct_change', 0))
-    # Apply Filters (Top 10)
+    
     final_gainers = [x for x in gainers if x.get('pct_change', 0) > 0][:10]
     final_losers = [x for x in losers if x.get('pct_change', 0) < 0][:10]
+    
     context = {
         'account': account,
         'realized_pnl': round(realized_pnl, 2),
@@ -439,37 +444,55 @@ def get_dashboard_data(request):
     try:
         account = ClientAccount.objects.get(user=request.user)
         
-        # P&L Logic
+        # 1. P&L Logic (Existing)
         today = timezone.now().date()
         realized = TradeLog.objects.filter(client_account=account, entry_time__date=today, status='CLOSED')\
             .aggregate(Sum('realized_pnl'))['realized_pnl__sum'] or 0.0
         
-        # Redis Fetch
+        # 2. OPTIMIZED REDIS FETCH (The Fix)
         tick_cache = caches['ticks']
-        keys = tick_cache.keys("tick:*")
+        
+        # Get all active tokens from DB
+        active_symbols = TradeSymbol.objects.filter(is_active=True).values('instrument_token')
+        
+        # Create the exact keys we expect in Redis (e.g., "tick:123456")
+        request_keys = [f"tick:{s['instrument_token']}" for s in active_symbols]
+        
         market_data = []
         
-        # Optimized Bulk Fetch
-        if keys:
-            raw_data = tick_cache.get_many(keys)
+        # Fetch only specific keys (Much faster and reliable than keys("*"))
+        if request_keys:
+            raw_data = tick_cache.get_many(request_keys)
+            # raw_data is a dict: {'tick:123456': 'json_string', ...}
+            
             for key, val in raw_data.items():
-                try: market_data.append(json.loads(val))
-                except: pass
+                if val: # Check if data exists
+                    try: 
+                        market_data.append(json.loads(val))
+                    except: pass
 
-        # Live Unrealized P&L
+        # 3. Live Unrealized P&L
         unrealized = 0.0
         open_pos_data = []
         open_positions = TradeLog.objects.filter(client_account=account, status='OPEN').select_related('symbol')
         
-        for pos in open_positions:
-            for tick in market_data:
-                if str(tick['token']) == str(pos.symbol.instrument_token):
-                    curr_val = (tick['ltp'] - pos.entry_price) * pos.quantity
-                    if pos.trade_type == 'SELL': curr_val *= -1
-                    unrealized += curr_val
-                    open_pos_data.append({'id': tick['token'], 'ltp': tick['ltp'], 'pnl': round(curr_val, 2)})
+        # Map market data for O(1) lookup
+        market_map = {str(m['token']): m for m in market_data}
 
-        # Sorting
+        for pos in open_positions:
+            token_str = str(pos.symbol.instrument_token)
+            if token_str in market_map:
+                tick = market_map[token_str]
+                ltp = tick['ltp']
+                curr_val = (ltp - pos.entry_price) * pos.quantity
+                
+                if pos.trade_type == 'SELL': 
+                    curr_val *= -1
+                
+                unrealized += curr_val
+                open_pos_data.append({'id': token_str, 'ltp': ltp, 'pnl': round(curr_val, 2)})
+
+        # 4. Sorting
         gainers = sorted(market_data, key=lambda x: x.get('pct_change', 0), reverse=True)
         losers = sorted(market_data, key=lambda x: x.get('pct_change', 0))
 
@@ -482,4 +505,5 @@ def get_dashboard_data(request):
             'positions': open_pos_data
         })
     except Exception as e:
+        print(f"Error in dashboard data: {e}") # Print error to console for debugging
         return JsonResponse({'status': 'error', 'message': str(e)})

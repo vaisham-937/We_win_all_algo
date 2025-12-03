@@ -43,6 +43,7 @@ class MarketDataHandler:
             close = ohlc.get('close', ltp)
             high = ohlc.get('high', ltp)
             low = ohlc.get('low', ltp)
+            print(f"🔴 REAL DATA FROM KITE: {symbol_obj.symbol} = ₹{ltp}")
 
             pct_change = ((ltp - close) / close) * 100 if close > 0 else 0
             pct_from_high = ((ltp - high) / high) * 100 if high > 0 else 0
