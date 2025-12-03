@@ -1,82 +1,77 @@
 import json
-import time
+import logging
+import threading
 from kiteconnect import KiteTicker
 from django.conf import settings
 from django.core.cache import caches
 from trading.models import TradeSymbol
 
-# Use the dedicated cache for ticks
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 tick_cache = caches['ticks']
 
 class MarketDataHandler:
-    """Manages a single Kite Ticker connection for all active symbols."""
-    
     def __init__(self, api_key, access_token):
-        self.kws = None
-        self.api_key = api_key
-        self.access_token = access_token
-        self.tokens_to_subscribe = set()
-        self.is_connected = False
+        self.kws = KiteTicker(api_key, access_token)
+        self.monitored_tokens = {}
+        
+        try:
+            symbols = TradeSymbol.objects.filter(symbol__in=settings.MONITORED_SYMBOLS, is_active=True)
+            for s in symbols:
+                self.monitored_tokens[int(s.instrument_token)] = s
+            logger.info(f"Loaded {len(self.monitored_tokens)} symbols for monitoring.")
+        except Exception as e:
+            logger.error(f"Error loading symbols: {e}")
 
     def start_ticker(self):
-        """Initializes and connects the Kite Ticker."""
-        if self.kws:
-            self.kws.close()
-        
-        self.kws = KiteTicker(self.api_key, self.access_token)
-        self.kws.on_ticks = self._on_ticks
-        self.kws.on_connect = self._on_connect
-        self.kws.on_close = self._on_close
-        
-        # The Ticker must run in a separate thread/process. 
-        # For simplicity here, we assume it's run via a management command/worker.
-        print("Kite Ticker attempting connection...")
-        self.kws.connect(daemon=True)
+        self.kws.on_ticks = self.on_ticks
+        self.kws.on_connect = self.on_connect
+        self.kws.connect(threaded=True)
 
-    def _on_ticks(self, ws, ticks):
-        """Callback on receiving real-time ticks. Stores in Redis."""
+    def on_connect(self, ws, response):
+        tokens = list(self.monitored_tokens.keys())
+        if tokens:
+            ws.subscribe(tokens)
+            ws.set_mode(ws.MODE_FULL, tokens)
+
+    def on_ticks(self, ws, ticks):
         for tick in ticks:
             token = tick['instrument_token']
-            # Store the latest tick data in the dedicated Redis cache for ticks.
-            # Key: 'tick:<token>', Value: JSON string of the tick. TTL: 2 seconds
-            tick_cache.set(f'tick:{token}', json.dumps(tick), timeout=2) 
+            symbol_obj = self.monitored_tokens.get(token)
+            if not symbol_obj: continue
+
+            ltp = tick['last_price']
+            ohlc = tick.get('ohlc', {})
+            close = ohlc.get('close', ltp)
+            high = ohlc.get('high', ltp)
+            low = ohlc.get('low', ltp)
+
+            # Metrics
+            pct_change = ((ltp - close) / close) * 100 if close > 0 else 0
+            pct_from_high = ((ltp - high) / high) * 100 if high > 0 else 0
+            pct_from_low = ((ltp - low) / low) * 100 if low > 0 else 0
+
+            # --- KEY UPDATE: STORE METADATA FOR RECOVERY ---
+            data = {
+                'symbol': symbol_obj.symbol,
+                'token': str(token),  # Store as string
+                'ltp': ltp,
+                'prev_close': close,
+                'day_high': high,
+                'day_low': low,
+                'pct_change': pct_change,
+                'pct_from_high': pct_from_high,
+                'pct_from_low': pct_from_low,
+                'is_fno': symbol_obj.symbol in settings.FNO_LIST,
+                # Store these so we can recreate DB entry if needed
+                'exchange': symbol_obj.exchange,
+                'segment': symbol_obj.segment,
+                'lot_size': symbol_obj.absolute_quantity
+            }
             
-            # Note: The strategy manager will read from this cache.
-
-    def _on_connect(self, ws, response):
-        """Subscribes to all required tokens upon successful connection."""
-        print("Kite Ticker connected.")
-        self.is_connected = True
-        self.update_subscriptions()
-        
-    def _on_close(self, ws, code, reason):
-        print(f"Kite Ticker closed. Code: {code}, Reason: {reason}")
-        self.is_connected = False
-        # Add reconnection logic here
-
-    def update_subscriptions(self):
-        """Updates the list of subscribed tokens based on active TradeSymbols."""
-        new_tokens = set([s.instrument_token for s in TradeSymbol.objects.filter(is_active=True)])
-        
-        # Tokens to unsubscribe
-        tokens_to_unsubscribe = list(self.tokens_to_subscribe - new_tokens)
-        if tokens_to_unsubscribe and self.is_connected:
-            self.kws.unsubscribe(tokens_to_unsubscribe)
-            print(f"Unsubscribed from {len(tokens_to_unsubscribe)} tokens.")
+            tick_cache.set(f"tick:{token}", json.dumps(data), timeout=86400)
             
-        # Tokens to subscribe
-        tokens_to_subscribe = list(new_tokens - self.tokens_to_subscribe)
-        if tokens_to_subscribe and self.is_connected:
-            self.kws.subscribe(tokens_to_subscribe)
-            self.kws.set_mode(self.kws.MODE_FULL, tokens_to_subscribe) # MODE_FULL for OHLC/Volume
-            print(f"Subscribed to {len(tokens_to_subscribe)} new tokens.")
-
-        self.tokens_to_subscribe = new_tokens
-
-# Note: The actual instantiation and running of this worker must be done
-# via a Django management command or a separate script in production.
-# For simplicity, we create a placeholder instance that needs a valid token.
-# In a real setup, we would need to fetch a valid token from *any* client to initiate this handler.
-# For now, let's use placeholder keys.
-# handler = MarketDataHandler("COMMON_API_KEY", "VALID_ACCESS_TOKEN") 
-# handler.start_ticker()
+            try:
+                from trading.kite_engine.strategy_manager import process_ladder_strategy
+                threading.Thread(target=process_ladder_strategy, args=(data,)).start()
+            except ImportError: pass

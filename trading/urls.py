@@ -9,13 +9,15 @@ urlpatterns = [
     path('signup/', views.signup_view, name='signup'),
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
-    
+
     # --- VERIFICATION APIs ---
     path('api/send-otp/', views.send_verification_otp, name='send_verification_otp'),
     path('api/verify-otp/', views.verify_otp_check, name='verify_otp_check'),
     # Main Dashboard
     path('dashboard/', views.dashboard_view, name='dashboard'),
-    
+    path('api/dashboard-data/', views.get_dashboard_data, name='get_dashboard_data'),
+
+    path('api/trigger-ladder/', views.trigger_ladder, name='trigger_ladder'),  
     # Client Credentials Management
     path('credentials/', views.credentials_view, name='credentials'),
     

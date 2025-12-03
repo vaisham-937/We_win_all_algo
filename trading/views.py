@@ -3,13 +3,13 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.db.models import Sum
-from .models import ClientAccount, TradeLog,  TradeSymbol
+from .models import ClientAccount, TradeLog,  TradeSymbol, LadderState
 from .kite_engine.account_manager import kite_session_manager
 from django.conf import settings
 from datetime import date
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
-from django.core.cache import cache
+from django.core.cache import caches
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib.auth import login, logout, authenticate
@@ -33,10 +33,8 @@ def send_verification_otp(request):
     
     if not value or target != 'email':
         return JsonResponse({'status': 'error', 'message': 'Valid email required'})
-
     # Generate OTP
     otp = str(random.randint(100000, 999999))
-    
     # Save to Session
     request.session['signup_otp'] = otp
     request.session['signup_email'] = value
@@ -63,7 +61,7 @@ def verify_otp_check(request):
         return JsonResponse({'status': 'error', 'message': 'Invalid OTP'})
 
 
-# --- HELPER CLASS: BACKGROUND EMAIL SENDER ---
+# --- 1. EMAIL HELPER ---
 class EmailThread(threading.Thread):
     def __init__(self, subject, message, from_email, recipient_list):
         self.subject = subject
@@ -71,7 +69,6 @@ class EmailThread(threading.Thread):
         self.from_email = from_email
         self.recipient_list = recipient_list
         threading.Thread.__init__(self)
-
     def run(self):
         try:
             send_mail(
@@ -164,7 +161,7 @@ def search_instruments(request):
     if len(query) < 2:
         return JsonResponse([], safe=False)
     # Fetch master list from Redis
-    master_json = cache.get('master_instruments_list')
+    master_json = caches.get('master_instruments_list')
     if not master_json:
         return JsonResponse({'error': 'Instruments list not found. Run "python manage.py fetch_instruments"'}, status=500)
 
@@ -241,32 +238,43 @@ def remove_symbol(request):
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)})
 
+# --- 4. DASHBOARD & STRATEGY ---
 @login_required
 def dashboard_view(request):
-    """Client Dashboard to view P&L, positions, and controls."""
     try:
         account = ClientAccount.objects.get(user=request.user)
     except ClientAccount.DoesNotExist:
         return redirect('credentials')
-    # Fetch today's P&L
+    # A. Existing Features
     today = timezone.now().date()
-    trades_today = TradeLog.objects.filter(
-        client_account=account, 
-        entry_time__date=today
-    )
+    trades_today = TradeLog.objects.filter(client_account=account, entry_time__date=today)
     realized_pnl = trades_today.filter(status='CLOSED').aggregate(Sum('realized_pnl'))['realized_pnl__sum'] or 0.0
-    # Fetch Open Positions
     open_positions = trades_today.filter(status='OPEN').select_related('symbol')
     active_scrips = TradeSymbol.objects.filter(is_active=True)
-    # Calculate Unrealized P&L (Requires getting latest tick data)
-    # This is handled via the separate API endpoint (get_realtime_pnl) for responsiveness.
+    # B. New Scanner Data (From Redis)
+    tick_cache = caches['ticks']
+    keys = tick_cache.keys("tick:*")
+    market_data = []
+    
+    if keys:
+        raw_data = tick_cache.get_many(keys)
+        for key, val in raw_data.items():
+            try:
+                market_data.append(json.loads(val))
+            except: pass
+    # Sort Gainers/Losers based on % Change
+    gainers = sorted(market_data, key=lambda x: x.get('pct_change', 0), reverse=True)
+    losers = sorted(market_data, key=lambda x: x.get('pct_change', 0))
+    # Apply Filters (Top 10)
+    final_gainers = [x for x in gainers if x.get('pct_change', 0) > 0][:10]
+    final_losers = [x for x in losers if x.get('pct_change', 0) < 0][:10]
     context = {
         'account': account,
         'realized_pnl': round(realized_pnl, 2),
         'open_positions': open_positions,
         'active_scrips': active_scrips,
-        'kill_switch_state': account.is_live_trading_enabled,
-        'kite_logged_in': bool(account.access_token),
+        'gainers': final_gainers,
+        'losers': final_losers,
     }
     return render(request, 'trading/dashboard.html', context)
 
@@ -371,3 +379,140 @@ def get_realtime_pnl(request):
         'timestamp': timezone.now().strftime("%H:%M:%S")
     })
 
+# ... (Keep all existing imports) ...
+
+@login_required
+@require_http_methods(["POST"])
+def trigger_ladder(request):
+    """
+    API to start Ladder.
+    Features: Auto-Recovery from Redis if DB entry is missing.
+    """
+    try:
+        data = json.loads(request.body)
+        token = str(data.get('token')) # Force string
+        action = data.get('action') 
+        
+        # User Settings
+        custom_tsl = float(data.get('tsl', 1.0))
+        custom_increase = float(data.get('increase', 1.0))
+        custom_capital = float(data.get('capital', 10000.0)) # Default 10k if empty
+        
+        account = ClientAccount.objects.get(user=request.user)
+        
+        # 1. FETCH DATA FROM REDIS FIRST (As requested)
+        tick_json = caches['ticks'].get(f"tick:{token}")
+        if not tick_json:
+            return JsonResponse({'status': 'error', 'message': 'No live data in Redis. Start Ticker.'})
+            
+        tick_data = json.loads(tick_json)
+        ltp = tick_data['ltp']
+        
+        # 2. FIND OR CREATE SYMBOL IN DB (Auto-Recovery)
+        symbol = TradeSymbol.objects.filter(instrument_token=token).first()
+        
+        if not symbol:
+            # "Zombie Data" Detected!
+            # If Redis has exchange/segment info, we can resurrect the symbol
+            if 'exchange' in tick_data and 'segment' in tick_data:
+                symbol = TradeSymbol.objects.create(
+                    symbol=tick_data['symbol'],
+                    instrument_token=token,
+                    exchange=tick_data['exchange'],
+                    segment=tick_data['segment'],
+                    absolute_quantity=tick_data.get('lot_size', 1),
+                    is_active=True
+                )
+                print(f"♻️ Auto-Recovered Symbol {symbol.symbol} from Redis Data")
+            else:
+                return JsonResponse({'status': 'error', 'message': 'Symbol missing in DB & Redis data incomplete. Please Resync.'})
+
+        # 3. INITIALIZE LADDER
+        ladder, _ = LadderState.objects.get_or_create(client=account, symbol=symbol)
+        
+        ladder.trade_capital = custom_capital
+        ladder.increase_pct = custom_increase
+        ladder.tsl_pct = custom_tsl
+        ladder.save()
+        
+        from trading.kite_engine.strategy_manager import start_buy_ladder, start_sell_ladder
+        
+        if action == 'BUY':
+            start_buy_ladder(ladder, ltp)
+        elif action == 'SELL':
+            start_sell_ladder(ladder, ltp)
+            
+        return JsonResponse({
+            'status': 'success', 
+            'message': f'Ladder Started at ₹{ltp} (Fetched from Redis)'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)})
+    
+
+
+@login_required
+def get_dashboard_data(request):
+    try:
+        account = ClientAccount.objects.get(user=request.user)
+        
+        # 1. LIVE P&L CALCULATION
+        today = timezone.now().date()
+        # Realized P&L from DB
+        realized = TradeLog.objects.filter(client_account=account, entry_time__date=today, status='CLOSED')\
+            .aggregate(Sum('realized_pnl'))['realized_pnl__sum'] or 0.0
+            
+        # Unrealized P&L from Open Positions + Redis LTP
+        open_pos = TradeLog.objects.filter(client_account=account, status='OPEN').select_related('symbol')
+        tick_cache = caches['ticks']
+        unrealized = 0.0
+        
+        pos_data = []
+        
+        # 2. FETCH ALL TICKS FROM REDIS
+        keys = tick_cache.keys("tick:*")
+        market_data = []
+        
+        # Optimized: Fetch all keys in one go
+        if keys:
+            raw_data = tick_cache.get_many(keys)
+            for key, val in raw_data.items():
+                try:
+                    tick = json.loads(val)
+                    market_data.append(tick)
+                    
+                    # Match tick with open positions for Live PnL
+                    for pos in open_pos:
+                        if str(pos.symbol.instrument_token) == str(tick['token']):
+                            current_val = (tick['ltp'] - pos.entry_price) * pos.quantity
+                            if pos.trade_type == 'SELL': current_val *= -1
+                            unrealized += current_val
+                            
+                            pos_data.append({
+                                'id': pos.symbol.instrument_token,
+                                'ltp': tick['ltp'],
+                                'pnl': round(current_val, 2)
+                            })
+                except: pass
+
+        # 3. SORT GAINERS & LOSERS
+        # Sort by % Change
+        gainers = sorted(market_data, key=lambda x: x.get('pct_change', 0), reverse=True)
+        losers = sorted(market_data, key=lambda x: x.get('pct_change', 0))
+
+        # Filter Top 10
+        top_gainers = [x for x in gainers if x.get('pct_change', 0) > 0][:10]
+        top_losers = [x for x in losers if x.get('pct_change', 0) < 0][:10]
+
+        return JsonResponse({
+            'status': 'success',
+            'realized_pnl': round(realized, 2),
+            'unrealized_pnl': round(unrealized, 2),
+            'gainers': top_gainers,
+            'losers': top_losers,
+            'positions': pos_data
+        })
+
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)})
