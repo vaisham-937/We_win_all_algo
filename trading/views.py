@@ -3,7 +3,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.db.models import Sum
-from .models import ClientAccount, TradeLog,  TradeSymbol, LadderState
+from .models import ClientAccount, TradeLog, TradeSymbol, LadderState
 from .kite_engine.account_manager import kite_session_manager
 from django.conf import settings
 from datetime import date
@@ -15,9 +15,9 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth import login, logout, authenticate
 from .forms import SignUpForm
 from django.contrib import messages
-from django.core.mail import send_mail
-import random
-import threading
+from django_redis import get_redis_connection
+
+redis_client = get_redis_connection("ticks")
 
 
 def root_redirect_view(request):
@@ -26,88 +26,23 @@ def root_redirect_view(request):
     else:
         return redirect('signup')
 
-# --- 2. SEND OTP API (FIXED: NOW THREADED) ---
-def send_verification_otp(request):
-    target = request.GET.get('target') # Should be 'email'
-    value = request.GET.get('value')
-    
-    if not value or target != 'email':
-        return JsonResponse({'status': 'error', 'message': 'Valid email required'})
-    # Generate OTP
-    otp = str(random.randint(100000, 999999))
-    # Save to Session
-    request.session['signup_otp'] = otp
-    request.session['signup_email'] = value
-    request.session['is_email_verified'] = False # Reset verification
-
-    # Send Email in Background
-    subject = 'Your Verification OTP'
-    message = f'Hello,\n\nYour OTP is: {otp}\n\nUse this to verify your account.'
-    
-    EmailThread(subject, message, settings.EMAIL_HOST_USER, [value]).start()
-    
-    return JsonResponse({'status': 'success', 'message': 'OTP sent'})
-    
-
-# ---  VERIFY OTP API (FIXED: ADDS SECURITY FLAG) ---
-def verify_otp_check(request):
-    user_otp = request.GET.get('otp')
-    saved_otp = request.session.get('signup_otp')
-    
-    if saved_otp and user_otp == saved_otp:
-        request.session['is_email_verified'] = True # MARK AS VERIFIED
-        return JsonResponse({'status': 'success'})
-    else:
-        return JsonResponse({'status': 'error', 'message': 'Invalid OTP'})
-
-
-# --- 1. EMAIL HELPER ---
-class EmailThread(threading.Thread):
-    def __init__(self, subject, message, from_email, recipient_list):
-        self.subject = subject
-        self.message = message
-        self.from_email = from_email
-        self.recipient_list = recipient_list
-        threading.Thread.__init__(self)
-    def run(self):
-        try:
-            send_mail(
-                self.subject, 
-                self.message, 
-                self.from_email, 
-                self.recipient_list, 
-                fail_silently=True
-            )
-            print(f"✅ Background Email sent successfully to {self.recipient_list}")
-        except Exception as e:
-            print(f"❌ Failed to send email: {e}")
-
-
-# --- SIGNUP VIEW (UPDATED) ---
+# --- SIGNUP VIEW (VERIFICATION REMOVED) ---
 def signup_view(request):
     if request.user.is_authenticated:
         return redirect('dashboard')
 
     if request.method == 'POST':
         form = SignUpForm(request.POST)
-        # SECURITY CHECK: Did they actually verify email?
-        if not request.session.get('is_email_verified', False):
-            messages.error(request, "Please verify your email address first.")
-            return render(request, 'trading/signup.html', {'form': form})
-
         if form.is_valid():
-            # Create User
-            user = form.save(commit=False)
-            # Ensure we use the verified email from session, not just what they typed
-            user.email = request.session.get('signup_email', form.cleaned_data['email'])
-            user.save()
+            # Create User directly
+            user = form.save()
             
             # Create Client Account
             ClientAccount.objects.create(
                 user=user,
                 phone_number=form.cleaned_data.get('phone_number'),
                 is_phone_verified=False,
-                is_email_verified=True
+                is_email_verified=False 
             )           
             messages.success(request, "Account created successfully! Please login.")
             return redirect('login')  
@@ -161,7 +96,7 @@ def search_instruments(request):
     if len(query) < 2:
         return JsonResponse([], safe=False)
     # Fetch master list from Redis
-    master_json = caches.get('master_instruments_list')
+    master_json = redis_client.get('master_instruments_list')
     if not master_json:
         return JsonResponse({'error': 'Instruments list not found. Run "python manage.py fetch_instruments"'}, status=500)
 
@@ -250,23 +185,24 @@ def dashboard_view(request):
     trades_today = TradeLog.objects.filter(client_account=account, entry_time__date=today)
     realized_pnl = trades_today.filter(status='CLOSED').aggregate(Sum('realized_pnl'))['realized_pnl__sum'] or 0.0
     open_positions = trades_today.filter(status='OPEN').select_related('symbol')
-    active_scrips = TradeSymbol.objects.filter(is_active=True)
-    
-    # --- REDIS FIX START ---
-    tick_cache = caches['ticks']
     
     # Generate list of keys from active scrips
-    request_keys = [f"tick:{s.instrument_token}" for s in active_scrips]
-    
+    active_tokens = redis_client.smembers("active_tokens")    
     market_data = []
-    if request_keys:
-        raw_data = tick_cache.get_many(request_keys)
-        for key, val in raw_data.items():
-            if val:
-                try: market_data.append(json.loads(val))
-                except: pass
-    # --- REDIS FIX END ---
-
+    if active_tokens:
+        # Prepare keys: [tick:123, tick:456]
+        keys = [f"tick:{int(t)}" for t in active_tokens]
+        # Bulk Fetch (MGET returns a LIST, not a Dict)
+        if keys:
+            raw_data = redis_client.mget(keys)
+            # --- FIX STARTS HERE ---
+            # OLD BROKEN LINE: for key, val in raw_data.items():
+            # NEW CORRECT LOOP (Iterate over the list directly):
+            for val in raw_data:
+                if val:
+                    try: 
+                        market_data.append(json.loads(val))
+                    except: pass
     gainers = sorted(market_data, key=lambda x: x.get('pct_change', 0), reverse=True)
     losers = sorted(market_data, key=lambda x: x.get('pct_change', 0))
     
@@ -277,7 +213,7 @@ def dashboard_view(request):
         'account': account,
         'realized_pnl': round(realized_pnl, 2),
         'open_positions': open_positions,
-        'active_scrips': active_scrips,
+        'active_scrips': active_tokens,
         'gainers': final_gainers,
         'losers': final_losers,
     }
@@ -444,66 +380,63 @@ def get_dashboard_data(request):
     try:
         account = ClientAccount.objects.get(user=request.user)
         
-        # 1. P&L Logic (Existing)
+        # 1. P&L (DB hit is unavoidable for TradeLog, but fast)
         today = timezone.now().date()
         realized = TradeLog.objects.filter(client_account=account, entry_time__date=today, status='CLOSED')\
             .aggregate(Sum('realized_pnl'))['realized_pnl__sum'] or 0.0
         
-        # 2. OPTIMIZED REDIS FETCH (The Fix)
-        tick_cache = caches['ticks']
-        
-        # Get all active tokens from DB
-        active_symbols = TradeSymbol.objects.filter(is_active=True).values('instrument_token')
-        
-        # Create the exact keys we expect in Redis (e.g., "tick:123456")
-        request_keys = [f"tick:{s['instrument_token']}" for s in active_symbols]
+        # 2. FAST REDIS FETCH (NO DB FOR SYMBOLS)
+        # Fetch the set of active tokens created by the Ticker
+        active_tokens = redis_client.smembers("active_tokens") # Returns {b'123', b'456'}
         
         market_data = []
-        
-        # Fetch only specific keys (Much faster and reliable than keys("*"))
-        if request_keys:
-            raw_data = tick_cache.get_many(request_keys)
-            # raw_data is a dict: {'tick:123456': 'json_string', ...}
+        if active_tokens:
+            # Prepare keys: [tick:123, tick:456]
+            keys = [f"tick:{int(t)}" for t in active_tokens]
             
-            for key, val in raw_data.items():
-                if val: # Check if data exists
-                    try: 
-                        market_data.append(json.loads(val))
-                    except: pass
+            # FIX FOR RAW REDIS MGET:
+            if keys:
+                raw_data = redis_client.mget(keys) # Returns a list of values
+                
+                for val in raw_data:
+                    if val:
+                        try: market_data.append(json.loads(val))
+                        except: pass
 
-        # 3. Live Unrealized P&L
+        # 3. Process Data (Sort/Rank)
+        gainers = sorted(market_data, key=lambda x: x.get('pct_change', 0), reverse=True)
+        losers = sorted(market_data, key=lambda x: x.get('pct_change', 0))
+
+        # 4. Open Positions (Needs Live LTP)
         unrealized = 0.0
         open_pos_data = []
         open_positions = TradeLog.objects.filter(client_account=account, status='OPEN').select_related('symbol')
         
-        # Map market data for O(1) lookup
-        market_map = {str(m['token']): m for m in market_data}
+        # Create Map for O(1) Access
+        live_map = {str(m['token']): m for m in market_data}
 
         for pos in open_positions:
-            token_str = str(pos.symbol.instrument_token)
-            if token_str in market_map:
-                tick = market_map[token_str]
-                ltp = tick['ltp']
+            token = str(pos.symbol.instrument_token)
+            if token in live_map:
+                ltp = live_map[token]['ltp']
                 curr_val = (ltp - pos.entry_price) * pos.quantity
-                
-                if pos.trade_type == 'SELL': 
-                    curr_val *= -1
-                
+                if pos.trade_type == 'SELL': curr_val *= -1
                 unrealized += curr_val
-                open_pos_data.append({'id': token_str, 'ltp': ltp, 'pnl': round(curr_val, 2)})
-
-        # 4. Sorting
-        gainers = sorted(market_data, key=lambda x: x.get('pct_change', 0), reverse=True)
-        losers = sorted(market_data, key=lambda x: x.get('pct_change', 0))
+                
+                open_pos_data.append({
+                    'id': token, 
+                    'ltp': ltp, 
+                    'pnl': round(curr_val, 2)
+                })
 
         return JsonResponse({
             'status': 'success',
             'realized_pnl': round(realized, 2),
             'unrealized_pnl': round(unrealized, 2),
-            'gainers': [x for x in gainers if x.get('pct_change', 0) > 0][:10],
-            'losers': [x for x in losers if x.get('pct_change', 0) < 0][:10],
+            'gainers': [x for x in gainers if x.get('pct_change', 0) > 0][:20], # Top 20
+            'losers': [x for x in losers if x.get('pct_change', 0) < 0][:20],   # Top 20
             'positions': open_pos_data
         })
+        
     except Exception as e:
-        print(f"Error in dashboard data: {e}") # Print error to console for debugging
         return JsonResponse({'status': 'error', 'message': str(e)})

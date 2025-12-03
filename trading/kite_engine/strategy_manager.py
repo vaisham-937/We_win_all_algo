@@ -5,22 +5,28 @@ from django.core.cache import caches
 from django.utils import timezone
 from trading.models import LadderState, ClientAccount, TradeSymbol
 from .account_manager import kite_session_manager
+from django_redis import get_redis_connection
 
 logger = logging.getLogger(__name__)
 
-# Use default cache for locking mechanisms
-redis_client = caches['default']
+# Use default cache for locking mechanisms (DB 1)
+# Note: Ensure this matches where you want locks. usually 'default' is fine.
+redis_lock = get_redis_connection("default")
 
 def place_order(client, symbol, transaction_type, qty, tag):
     """
     Places an MIS Market Order via Kite Connect.
     """
     try:
+        # 1. Get Kite Instance (Using Updated Session Manager)
+        # This will now look for "access_token:{user_id}" in Raw Redis
         kite = kite_session_manager.get_kite_instance(client.user.id)
+        
         if not kite:
-            logger.error(f"No Kite instance for user {client.user.username}")
+            logger.error(f"❌ No Kite instance for user {client.user.username} (Check Redis Keys)")
             return None
 
+        # 2. Place Order
         order_id = kite.place_order(
             variety=kite.VARIETY_REGULAR,
             exchange=symbol.exchange,
@@ -31,25 +37,26 @@ def place_order(client, symbol, transaction_type, qty, tag):
             order_type=kite.ORDER_TYPE_MARKET,
             tag=tag
         )
-        logger.info(f"Order Placed: {transaction_type} {symbol.symbol} Qty: {qty} ID: {order_id}")
+        logger.info(f"✅ Order Placed: {transaction_type} {symbol.symbol} Qty: {qty} ID: {order_id}")
         return order_id
+        
     except Exception as e:
-        logger.error(f"Order Placement Failed: {e}")
+        logger.error(f"❌ Order Placement Failed for {symbol.symbol}: {e}")
         return None
 
 def process_ladder_strategy(tick_data):
     """
     Main Logic Loop: Called for every tick of monitored symbols.
-    Checks if any active ladder needs action (Add Qty, TSL Exit, or Circuit Exit).
     """
     token = tick_data['token']
     ltp = tick_data['ltp']
     
-    # Circuit Limits (if available in tick data)
+    # Circuit Limits (if available)
     upper_circuit = tick_data.get('upper_circuit_limit')
     lower_circuit = tick_data.get('lower_circuit_limit')
     
     # 1. Find ACTIVE ladders for this symbol
+    # We fetch from DB because Strategy State is persistent
     active_ladders = LadderState.objects.filter(
         symbol__instrument_token=token, 
         is_active=True
@@ -60,9 +67,12 @@ def process_ladder_strategy(tick_data):
 
     for ladder in active_ladders:
         # --- RACE CONDITION PROTECTION ---
+        # Lock Key: "ladder_lock:123"
         lock_key = f"ladder_lock:{ladder.id}"
-        if not redis_client.add(lock_key, "LOCKED", timeout=2): 
-            # If lock exists, skip this tick to prevent double processing
+        
+        # Use raw redis .set(..., nx=True, ex=2) for robust locking
+        if not redis_lock.set(lock_key, "LOCKED", nx=True, ex=2): 
+            # If lock exists (set returns False), skip this tick
             continue
 
         try:
@@ -84,52 +94,45 @@ def process_ladder_strategy(tick_data):
             logger.error(f"Error processing ladder {ladder.id}: {e}")
         finally:
             # Release lock
-            redis_client.delete(lock_key)
+            redis_lock.delete(lock_key)
 
 def manage_buy_ladder(ladder, ltp, upper_circuit=None):
-    # 1. Update Highest Price Seen (For TSL Calculation)
+    # 1. Update Highest Price Seen (For TSL)
     if ltp > ladder.extreme_price:
         ladder.extreme_price = ltp
         ladder.save(update_fields=['extreme_price'])
 
-    # 2. Check Circuit Limit Exit (New Requirement)
-    # If price hits Upper Circuit, we assume we should exit profit
+    # 2. Check Circuit Limit Exit
     if upper_circuit and ltp >= upper_circuit:
         logger.info(f"Upper Circuit Hit for BUY {ladder.symbol}. Exiting...")
         close_ladder(ladder, ltp, "UC_EXIT")
         return
 
-    # 3. Check TSL Hit (Exit & Reverse Condition)
-    # Logic: If price drops X% from the Highest Point
+    # 3. Check TSL Hit
     drop_pct = ((ladder.extreme_price - ltp) / ladder.extreme_price) * 100
     
     if drop_pct >= ladder.tsl_pct:
         logger.info(f"TSL Hit for BUY {ladder.symbol}. Reversing to SELL...")
         
-        # A. Square Off Current Buy Position
+        # Square Off Buy
         place_order(ladder.client, ladder.symbol, 'SELL', ladder.current_qty, "TSL_EXIT")
         
-        # B. Start Reverse Sell Ladder
-        # We reset state and immediately enter Sell
+        # Reverse to Sell
         ladder.current_mode = 'SELL'
         ladder.entry_price = ltp
-        ladder.extreme_price = ltp # Reset high/low tracking for new leg
+        ladder.extreme_price = ltp 
         ladder.last_add_price = ltp
         ladder.level_count = 1
         
-        # Determine new quantity based on capital
         new_qty = int(ladder.trade_capital / ltp)
         if new_qty < 1: new_qty = 1
-        
         ladder.current_qty = new_qty
         ladder.save()
         
-        # Place Entry Sell Order
         place_order(ladder.client, ladder.symbol, 'SELL', new_qty, "REVERSE_ENTRY")
         return
 
-    # 4. Check Pyramid Add (Add on Rise)
-    # Logic: If price rises X% from the LAST Entry/Add price
+    # 4. Check Pyramid Add
     rise_from_last = ((ltp - ladder.last_add_price) / ladder.last_add_price) * 100
     
     if rise_from_last >= ladder.increase_pct and ladder.level_count < settings.LADDER_SETTINGS['MAX_PYRAMID_LEVELS']:
@@ -145,29 +148,27 @@ def manage_buy_ladder(ladder, ltp, upper_circuit=None):
             ladder.save()
 
 def manage_sell_ladder(ladder, ltp, lower_circuit=None):
-    # 1. Update Lowest Price Seen (For TSL Calculation)
+    # 1. Update Lowest Price Seen
     if ltp < ladder.extreme_price or ladder.extreme_price == 0:
         ladder.extreme_price = ltp
         ladder.save(update_fields=['extreme_price'])
 
-    # 2. Check Circuit Limit Exit (New Requirement)
-    # If price hits Lower Circuit, we exit short position
+    # 2. Check Circuit Limit Exit
     if lower_circuit and ltp <= lower_circuit:
         logger.info(f"Lower Circuit Hit for SELL {ladder.symbol}. Exiting...")
         close_ladder(ladder, ltp, "LC_EXIT")
         return
 
-    # 3. Check TSL Hit (Exit & Reverse Condition)
-    # Logic: If price rises X% from the Lowest Point
+    # 3. Check TSL Hit
     rise_pct = ((ltp - ladder.extreme_price) / ladder.extreme_price) * 100
     
     if rise_pct >= ladder.tsl_pct:
         logger.info(f"TSL Hit for SELL {ladder.symbol}. Reversing to BUY...")
         
-        # A. Square Off Current Sell Position
+        # Square Off Sell
         place_order(ladder.client, ladder.symbol, 'BUY', ladder.current_qty, "TSL_EXIT")
         
-        # B. Start Reverse Buy Ladder
+        # Reverse to Buy
         ladder.current_mode = 'BUY'
         ladder.entry_price = ltp
         ladder.extreme_price = ltp
@@ -176,16 +177,13 @@ def manage_sell_ladder(ladder, ltp, lower_circuit=None):
         
         new_qty = int(ladder.trade_capital / ltp)
         if new_qty < 1: new_qty = 1
-        
         ladder.current_qty = new_qty
         ladder.save()
         
-        # Place Entry Buy Order
         place_order(ladder.client, ladder.symbol, 'BUY', new_qty, "REVERSE_ENTRY")
         return
 
-    # 4. Check Pyramid Add (Add on Fall)
-    # Logic: If price falls X% from the LAST Entry/Add price
+    # 4. Check Pyramid Add
     fall_from_last = ((ladder.last_add_price - ltp) / ladder.last_add_price) * 100
     
     if fall_from_last >= ladder.increase_pct and ladder.level_count < settings.LADDER_SETTINGS['MAX_PYRAMID_LEVELS']:
@@ -214,7 +212,6 @@ def close_ladder(ladder, ltp, tag):
 # --- INITIALIZERS ---
 
 def start_buy_ladder(ladder, ltp):
-    """Initializes a Buy Ladder from the Dashboard Trigger."""
     qty = int(ladder.trade_capital / ltp)
     if qty < 1: qty = 1 
     
@@ -224,13 +221,12 @@ def start_buy_ladder(ladder, ltp):
         ladder.is_active = True
         ladder.entry_price = ltp
         ladder.last_add_price = ltp
-        ladder.extreme_price = ltp # Start TSL tracking from entry
+        ladder.extreme_price = ltp
         ladder.current_qty = qty
         ladder.level_count = 1
         ladder.save()
 
 def start_sell_ladder(ladder, ltp):
-    """Initializes a Sell Ladder from the Dashboard Trigger."""
     qty = int(ladder.trade_capital / ltp)
     if qty < 1: qty = 1
     
@@ -240,7 +236,7 @@ def start_sell_ladder(ladder, ltp):
         ladder.is_active = True
         ladder.entry_price = ltp
         ladder.last_add_price = ltp
-        ladder.extreme_price = ltp # Start TSL tracking from entry
+        ladder.extreme_price = ltp
         ladder.current_qty = qty
         ladder.level_count = 1
         ladder.save()

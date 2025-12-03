@@ -25,7 +25,7 @@ def fetch_instruments_task():
         
         master_list = []
         for i in instruments:
-            if i['exchange'] in ['NSE', 'BSE', ]:
+            if i['exchange'] in ['NSE' ]:
                 master_list.append({
                     'symbol': i['tradingsymbol'],
                     'token': i['instrument_token'],
@@ -39,3 +39,4 @@ def fetch_instruments_task():
         
     except Exception as e:
         return f"Error: {str(e)}"
+    

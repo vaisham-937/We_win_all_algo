@@ -160,7 +160,6 @@ MAX_SCRIPS_LIMIT = 75
 # Tick size settings (for automatic adjustment)
 TICK_SIZES = {
     'NSE': 0.05,
-    'BSE': 0.01,
 }
 
 # --- AUTHENTICATION REDIRECTS ---
@@ -186,7 +185,6 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
-# ... (पुरानी सेटिंग्स के नीचे)
 
 # --- 1. REAL EMAIL CONFIGURATION (Gmail) ---
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'

@@ -11,8 +11,7 @@ urlpatterns = [
     path('logout/', views.logout_view, name='logout'),
 
     # --- VERIFICATION APIs ---
-    path('api/send-otp/', views.send_verification_otp, name='send_verification_otp'),
-    path('api/verify-otp/', views.verify_otp_check, name='verify_otp_check'),
+    
     # Main Dashboard
     path('dashboard/', views.dashboard_view, name='dashboard'),
     path('api/dashboard-data/', views.get_dashboard_data, name='get_dashboard_data'),
