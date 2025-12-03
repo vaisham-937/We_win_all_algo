@@ -19,9 +19,7 @@ class MarketDataHandler:
             symbols = TradeSymbol.objects.filter(symbol__in=settings.MONITORED_SYMBOLS, is_active=True)
             for s in symbols:
                 self.monitored_tokens[int(s.instrument_token)] = s
-            logger.info(f"Loaded {len(self.monitored_tokens)} symbols for monitoring.")
-        except Exception as e:
-            logger.error(f"Error loading symbols: {e}")
+        except: pass
 
     def start_ticker(self):
         self.kws.on_ticks = self.on_ticks
@@ -46,15 +44,14 @@ class MarketDataHandler:
             high = ohlc.get('high', ltp)
             low = ohlc.get('low', ltp)
 
-            # Metrics
             pct_change = ((ltp - close) / close) * 100 if close > 0 else 0
             pct_from_high = ((ltp - high) / high) * 100 if high > 0 else 0
             pct_from_low = ((ltp - low) / low) * 100 if low > 0 else 0
 
-            # --- KEY UPDATE: STORE METADATA FOR RECOVERY ---
+            # --- CRITICAL: STORE METADATA FOR AUTO-RECOVERY ---
             data = {
                 'symbol': symbol_obj.symbol,
-                'token': str(token),  # Store as string
+                'token': str(token),
                 'ltp': ltp,
                 'prev_close': close,
                 'day_high': high,
@@ -63,7 +60,7 @@ class MarketDataHandler:
                 'pct_from_high': pct_from_high,
                 'pct_from_low': pct_from_low,
                 'is_fno': symbol_obj.symbol in settings.FNO_LIST,
-                # Store these so we can recreate DB entry if needed
+                # Metadata needed to recreate DB entry if missing
                 'exchange': symbol_obj.exchange,
                 'segment': symbol_obj.segment,
                 'lot_size': symbol_obj.absolute_quantity
@@ -74,4 +71,4 @@ class MarketDataHandler:
             try:
                 from trading.kite_engine.strategy_manager import process_ladder_strategy
                 threading.Thread(target=process_ladder_strategy, args=(data,)).start()
-            except ImportError: pass
+            except: pass

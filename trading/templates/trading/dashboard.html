@@ -45,6 +45,10 @@
 
             <!-- Controls -->
             <div class="flex space-x-3">
+                <button onclick="openModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg flex items-center shadow-lg transition transform hover:scale-105 font-medium">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg> 
+                    Add Scrips
+                </button>
                 <a href="{% url 'credentials' %}" class="bg-gray-700 hover:bg-gray-600 text-gray-200 px-5 py-2.5 rounded-lg shadow-lg border border-gray-600 transition font-medium">
                     Settings
                 </a>
@@ -253,7 +257,8 @@
             closeStrategyModal();
 
             try {
-                const res = await fetch('/api/trigger-ladder/', {
+                // FIXED: Used window.location.origin to ensure absolute URL
+                const res = await fetch(window.location.origin + '/api/trigger-ladder/', {
                     method: 'POST',
                     body: JSON.stringify({ 
                         token: selectedToken, 
@@ -269,10 +274,11 @@
             } catch(e) { alert("Network Error"); }
         }
 
-        // --- 3. AUTO REFRESH (5 SECONDS) ---
+        // --- 3. AJAX AUTO REFRESH (5 SECONDS) ---
         async function refreshDashboard() {
             try {
-                const res = await fetch('/api/dashboard-data/');
+                // FIXED: Used window.location.origin to prevent relative URL errors
+                const res = await fetch(window.location.origin + '/api/dashboard-data/');
                 if(!res.ok) return;
                 const data = await res.json();
 
@@ -297,7 +303,9 @@
                         }
                     });
                 }
-            } catch(e) {}
+            } catch(e) {
+                console.log("Polling error (harmless if page closed):", e);
+            }
         }
 
         function renderTable(id, items, action) {
@@ -343,7 +351,8 @@
             clearTimeout(debounceTimer);
             if(e.target.value.length < 2) { searchResults.classList.add('hidden'); return; }
             debounceTimer = setTimeout(async () => {
-                const res = await fetch(`/api/search-instruments/?q=${e.target.value}`);
+                // FIXED: window.location.origin
+                const res = await fetch(window.location.origin + `/api/search-instruments/?q=${e.target.value}`);
                 const data = await res.json();
                 searchResults.innerHTML = '';
                 data.forEach(item => {
@@ -351,7 +360,8 @@
                     div.className = 'p-3 hover:bg-gray-700 cursor-pointer border-b border-gray-700 flex justify-between';
                     div.innerHTML = `<span class="font-bold text-white">${item.value.symbol}</span><button class="text-xs bg-indigo-600 px-2 py-1 rounded text-white">Add</button>`;
                     div.onclick = async () => {
-                        await fetch('/api/add-symbol/', { method: 'POST', body: JSON.stringify({instrument: item.value}), headers: { 'X-CSRFToken': '{{ csrf_token }}' } });
+                        // FIXED: window.location.origin
+                        await fetch(window.location.origin + '/api/add-symbol/', { method: 'POST', body: JSON.stringify({instrument: item.value}), headers: { 'X-CSRFToken': '{{ csrf_token }}' } });
                         closeModal();
                     };
                     searchResults.appendChild(div);
@@ -372,7 +382,8 @@
                 rail.classList.remove('bg-green-600'); rail.classList.add('bg-red-900');
                 knob.style.transform = 'translateX(0)'; label.innerHTML = '<span class="text-red-500 drop-shadow-md">STOPPED (KILL SWITCH)</span>';
             }
-             try { await fetch('/api/toggle-kill-switch/', { method: 'POST', headers: { 'X-CSRFToken': '{{ csrf_token }}' } }); } catch(e){}
+             // FIXED: window.location.origin
+             try { await fetch(window.location.origin + '/api/toggle-kill-switch/', { method: 'POST', headers: { 'X-CSRFToken': '{{ csrf_token }}' } }); } catch(e){}
         }
     </script>
 </body>
