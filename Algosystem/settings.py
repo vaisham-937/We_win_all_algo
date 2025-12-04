@@ -154,9 +154,7 @@ KITE_REDIRECT_URL = "http://127.0.0.1:8000/kite/callback"
 
 # --- TRADING CONSTANTS ---
 SQURE_OFF_TIME = "15:15:00" 
-
 MAX_SCRIPS_LIMIT = 75 
-
 # Tick size settings (for automatic adjustment)
 TICK_SIZES = {
     'NSE': 0.05,

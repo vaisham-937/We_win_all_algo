@@ -322,6 +322,60 @@ def get_realtime_pnl(request):
 
 
 # --- TRIGGER LADDER (AUTO-RECOVERY FIX) ---
+# @login_required
+# @require_http_methods(["POST"])
+# def trigger_ladder(request):
+#     try:
+#         data = json.loads(request.body)
+#         token = str(data.get('token'))
+#         action = data.get('action')
+#         custom_capital = float(data.get('capital', 10000.0))
+        
+#         account = ClientAccount.objects.get(user=request.user)
+        
+#        # 1. FETCH REDIS DATA FIRST
+#         # [FIX] Use redis_client.get() to match the Ticker's Raw Format
+#         tick_json = redis_client.get(f"tick:{token}")
+
+#         if not tick_json:
+#             return JsonResponse({'status': 'error', 'message': 'No Live Data in Redis. Check Ticker.'})
+        
+#         tick_data = json.loads(tick_json)
+        
+#         # 2. AUTO-RECOVER SYMBOL IF MISSING IN DB
+#         symbol = TradeSymbol.objects.filter(instrument_token=token).first()
+#         if not symbol:
+#             # Create it from Redis Data
+#             if 'exchange' in tick_data:
+#                 symbol = TradeSymbol.objects.create(
+#                     symbol=tick_data['symbol'],
+#                     instrument_token=token,
+#                     exchange=tick_data['exchange'],
+#                     segment=tick_data['segment'],
+#                     absolute_quantity=tick_data.get('lot_size', 1),
+#                     is_active=True
+#                 )
+#                 print(f"Recovered {symbol.symbol} from Redis")
+#             else:
+#                 return JsonResponse({'status': 'error', 'message': 'Restart Ticker to update metadata.'})
+
+#         # 3. START STRATEGY
+#         ladder, _ = LadderState.objects.get_or_create(client=account, symbol=symbol)
+#         ladder.trade_capital = custom_capital
+#         ladder.increase_pct = float(data.get('increase', 1.0))
+#         ladder.tsl_pct = float(data.get('tsl', 1.0))
+#         ladder.save()
+        
+#         from trading.kite_engine.strategy_manager import start_buy_ladder, start_sell_ladder
+#         if action == 'BUY': start_buy_ladder(ladder, tick_data['ltp'])
+#         elif action == 'SELL': start_sell_ladder(ladder, tick_data['ltp'])
+            
+#         return JsonResponse({'status': 'success', 'message': f'{action} Ladder Started'})
+        
+#     except Exception as e:
+#         return JsonResponse({'status': 'error', 'message': str(e)})
+
+
 @login_required
 @require_http_methods(["POST"])
 def trigger_ladder(request):
@@ -334,7 +388,9 @@ def trigger_ladder(request):
         account = ClientAccount.objects.get(user=request.user)
         
         # 1. FETCH REDIS DATA FIRST
-        tick_json = caches['ticks'].get(f"tick:{token}")
+        # [FIX] Use redis_client.get() to match the Ticker's Raw Format
+        tick_json = redis_client.get(f"tick:{token}")
+        
         if not tick_json:
             return JsonResponse({'status': 'error', 'message': 'No Live Data in Redis. Check Ticker.'})
         
@@ -343,14 +399,18 @@ def trigger_ladder(request):
         # 2. AUTO-RECOVER SYMBOL IF MISSING IN DB
         symbol = TradeSymbol.objects.filter(instrument_token=token).first()
         if not symbol:
-            # Create it from Redis Data
-            if 'exchange' in tick_data:
+            if 'symbol' in tick_data: # Ensure 'symbol' key exists
+                # Determine color logic if needed or default
+                color = 'GREEN'
+                if tick_data.get('is_fno'): color = 'BLUE'
+
                 symbol = TradeSymbol.objects.create(
                     symbol=tick_data['symbol'],
                     instrument_token=token,
-                    exchange=tick_data['exchange'],
-                    segment=tick_data['segment'],
-                    absolute_quantity=tick_data.get('lot_size', 1),
+                    exchange=tick_data.get('exchange', 'NSE'), # Fallback to NSE if missing
+                    segment=tick_data.get('segment', 'EQ'),
+                    absolute_quantity=1, # Default to 1 if not in data
+                    price_band_color=color,
                     is_active=True
                 )
                 print(f"Recovered {symbol.symbol} from Redis")
@@ -365,10 +425,16 @@ def trigger_ladder(request):
         ladder.save()
         
         from trading.kite_engine.strategy_manager import start_buy_ladder, start_sell_ladder
-        if action == 'BUY': start_buy_ladder(ladder, tick_data['ltp'])
-        elif action == 'SELL': start_sell_ladder(ladder, tick_data['ltp'])
+        
+        # Pass LTP directly
+        current_ltp = tick_data.get('ltp', 0)
+        if current_ltp > 0:
+            if action == 'BUY': start_buy_ladder(ladder, current_ltp)
+            elif action == 'SELL': start_sell_ladder(ladder, current_ltp)
             
-        return JsonResponse({'status': 'success', 'message': f'{action} Ladder Started'})
+            return JsonResponse({'status': 'success', 'message': f'{action} Ladder Started'})
+        else:
+             return JsonResponse({'status': 'error', 'message': 'LTP is zero or invalid.'})
         
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)})

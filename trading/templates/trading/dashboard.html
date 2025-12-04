@@ -6,151 +6,186 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Algo Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        .search-results::-webkit-scrollbar { width: 8px; }
-        .search-results::-webkit-scrollbar-track { background: #1f2937; }
-        .search-results::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
-        .dot { top: 0.25rem; left: 0.25rem; transition: all 0.3s ease-in-out; }
+        body { font-family: 'Outfit', sans-serif; }
+        
+        /* Glassmorphism Classes */
+        .glass-panel {
+            background: rgba(31, 41, 55, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0f1115; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+        
+        /* Toggle Switch Animation */
+        .dot { top: 0.25rem; left: 0.25rem; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
         input:checked ~ .dot { transform: translateX(100%); }
         
-        /* Custom Flash Animation for Updates */
+        /* Flash Animations */
         @keyframes flash-green { 0% { background-color: rgba(34, 197, 94, 0.2); } 100% { background-color: transparent; } }
         @keyframes flash-red { 0% { background-color: rgba(239, 68, 68, 0.2); } 100% { background-color: transparent; } }
         .flash-up { animation: flash-green 1s ease-out; }
         .flash-down { animation: flash-red 1s ease-out; }
     </style>
 </head>
-<body class="bg-gray-900 text-gray-100 min-h-screen p-4 md:p-6 relative">
+<body class="bg-[#0f1115] text-gray-100 min-h-screen relative selection:bg-indigo-500 selection:text-white">
     
-    <div class="max-w-7xl mx-auto space-y-6">
+    <!-- Background Glows -->
+    <div class="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
+        <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-900/10 rounded-full blur-[120px]"></div>
+        <div class="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-900/10 rounded-full blur-[120px]"></div>
+    </div>
+
+    <div class="max-w-7xl mx-auto space-y-8 p-4 md:p-8">
         
-        <header class="flex flex-col md:flex-row justify-between items-center bg-gray-800 p-5 rounded-xl shadow-lg border border-gray-700 space-y-4 md:space-y-0">
+        <!-- 1. HEADER -->
+        <header class="glass-panel p-5 rounded-2xl flex flex-col md:flex-row justify-between items-center shadow-2xl space-y-4 md:space-y-0">
             <div>
-                <h1 class="text-2xl font-bold text-white tracking-wide">Algo Dashboard <span class="text-indigo-400">| {{ user.username }}</span></h1>
+                <h1 class="text-2xl font-bold text-white tracking-wide flex items-center">
+                    Algo Dashboard <span class="mx-3 text-gray-600 text-lg">|</span> <span class="text-indigo-400 font-medium">{{ user.username }}</span>
+                </h1>
                 
-                <div class="flex items-center mt-3 bg-gray-900 p-2 rounded-lg border border-gray-700 inline-flex">
+                <!-- Kill Switch -->
+                <div class="flex items-center mt-3 bg-[#161b22]/80 p-2 rounded-xl border border-gray-700/50 inline-flex">
                     <label for="killSwitch" class="flex items-center cursor-pointer relative">
                         <input type="checkbox" id="killSwitch" class="sr-only" 
                                {% if account.is_live_trading_enabled %}checked{% endif %} 
                                onchange="toggleKillSwitch()">
-                        <div class="w-14 h-7 bg-gray-700 rounded-full shadow-inner transition-colors duration-300 ease-in-out" id="toggleRail"></div>
-                        <div class="dot absolute w-5 h-5 bg-white rounded-full shadow transition-transform duration-300 ease-in-out" id="toggleKnob"></div>
+                        <div class="w-14 h-7 bg-gray-700 rounded-full shadow-inner transition-colors duration-300" id="toggleRail"></div>
+                        <div class="dot absolute w-5 h-5 bg-white rounded-full shadow-md" id="toggleKnob"></div>
                     </label>
-                    <div class="ml-3 font-bold text-sm tracking-wider" id="statusLabel">
+                    <div class="ml-3 font-bold text-xs tracking-wider uppercase" id="statusLabel">
                         {% if account.is_live_trading_enabled %}
-                            <span class="text-green-400 drop-shadow-md">LIVE TRADING ON</span>
+                            <span class="text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.5)]">Live Trading ON</span>
                         {% else %}
-                            <span class="text-red-500 drop-shadow-md">STOPPED (KILL SWITCH)</span>
+                            <span class="text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]">System Halted</span>
                         {% endif %}
                     </div>
                 </div>
             </div>
 
+            <!-- Controls -->
             <div class="flex space-x-3">
-                <button onclick="openModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg flex items-center shadow-lg transition transform hover:scale-105 font-medium">
-                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg> 
-                    Add Scrips
-                </button>
-                <a href="{% url 'credentials' %}" class="bg-gray-700 hover:bg-gray-600 text-gray-200 px-5 py-2.5 rounded-lg shadow-lg border border-gray-600 transition font-medium">
+                <a href="{% url 'credentials' %}" class="glass-panel hover:bg-gray-700/50 text-gray-200 px-5 py-2.5 rounded-xl transition text-sm font-medium flex items-center">
                     Settings
                 </a>
-                <a href="{% url 'logout' %}" class="bg-red-900/30 hover:bg-red-800/50 text-red-300 px-3 py-2.5 rounded-lg border border-red-800/50 transition">
+                <a href="{% url 'logout' %}" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-3 py-2.5 rounded-xl border border-red-500/20 transition">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                 </a>
             </div>
         </header>
 
+        <!-- 2. P&L CARDS -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="bg-gray-800 p-6 rounded-xl shadow-lg border-l-4 border-green-500 border border-gray-700">
-                <h3 class="text-gray-400 text-sm font-medium uppercase tracking-wider">Realized P&L (Today)</h3>
-                <p class="text-4xl font-extrabold text-white mt-2 tracking-tight" id="realized_pnl">₹ {{ realized_pnl }}</p>
+            <div class="glass-panel p-6 rounded-2xl relative overflow-hidden group">
+                <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                    <svg class="w-24 h-24 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"></path></svg>
+                </div>
+                <h3 class="text-gray-400 text-xs font-bold uppercase tracking-wider">Realized P&L (Today)</h3>
+                <p class="text-4xl font-bold text-white mt-2 tracking-tight" id="realized_pnl">₹ {{ realized_pnl }}</p>
             </div>
-            <div class="bg-gray-800 p-6 rounded-xl shadow-lg border-l-4 border-yellow-500 border border-gray-700">
-                <h3 class="text-gray-400 text-sm font-medium uppercase tracking-wider">Unrealized P&L (Open)</h3>
-                <p class="text-4xl font-extrabold text-white mt-2 tracking-tight" id="unrealized_pnl">Loading...</p>
+            <div class="glass-panel p-6 rounded-2xl relative overflow-hidden group">
+                <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                    <svg class="w-24 h-24 text-yellow-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd"></path></svg>
+                </div>
+                <h3 class="text-gray-400 text-xs font-bold uppercase tracking-wider">Unrealized P&L (Open)</h3>
+                <p class="text-4xl font-bold text-white mt-2 tracking-tight" id="unrealized_pnl">Loading...</p>
             </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- 3. LIVE SCANNERS -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             
-            <div class="bg-gray-800 rounded-xl shadow-lg border border-gray-700 overflow-hidden flex flex-col h-96">
-                <div class="p-4 border-b border-gray-700 flex justify-between bg-gray-900/50 items-center">
-                    <h2 class="text-lg font-bold text-green-400 flex items-center">Top Gainers (Buy)</h2>
-                    <span class="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded border border-gray-700">Live Data</span>
+            <!-- TOP GAINERS (Explicit Border Added) -->
+            <div class="glass-panel rounded-2xl overflow-hidden flex flex-col h-full border border-gray-600 shadow-xl">
+                <div class="p-4 border-b border-gray-700/50 bg-black/20 flex justify-between items-center backdrop-blur-sm sticky top-0 z-20">
+                    <h2 class="text-lg font-bold text-green-400 flex items-center">
+                        <span class="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
+                        Top Gainers
+                    </h2>
+                    <span class="text-[10px] uppercase font-bold text-gray-500 bg-gray-900/50 px-2 py-1 rounded border border-gray-800">Live Feed</span>
                 </div>
-                <div class="overflow-y-auto flex-1">
-                    <table class="min-w-full text-sm text-left text-gray-300">
-                        <thead class="bg-gray-900 text-xs uppercase text-gray-500 sticky top-0 z-10">
+                <div class="p-2">
+                    <table class="w-full text-sm text-left text-gray-300 border-separate border-spacing-y-1">
+                        <thead class="text-xs uppercase text-gray-500">
                             <tr>
-                                <th class="px-4 py-3">Symbol</th>
-                                <th class="px-4 py-3 text-right">LTP</th>
-                                <th class="px-4 py-3 text-center">% Chg</th>
-                                <th class="px-4 py-3 text-center">Day H/L</th>
-                                <th class="px-4 py-3 text-right">Start</th>
+                                <th class="px-4 py-2 font-semibold">Symbol</th>
+                                <th class="px-4 py-2 text-right font-semibold">LTP</th>
+                                <th class="px-4 py-2 text-center font-semibold">% Chg</th>
+                                <th class="px-4 py-2 text-center font-semibold">H/L %</th>
+                                <th class="px-4 py-2 text-right font-semibold">Action</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-700" id="gainers-body">
-                            <tr><td colspan="5" class="p-8 text-center text-gray-500 italic">Connecting to Redis...</td></tr>
+                        <tbody id="gainers-body">
+                            <tr><td colspan="5" class="p-8 text-center text-gray-500 text-xs">Waiting for Tick Data...</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
 
-            <div class="bg-gray-800 rounded-xl shadow-lg border border-gray-700 overflow-hidden flex flex-col h-96">
-                <div class="p-4 border-b border-gray-700 flex justify-between bg-gray-900/50 items-center">
-                    <h2 class="text-lg font-bold text-red-400 flex items-center">Top Losers (Sell)</h2>
-                    <span class="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded border border-gray-700">Live Data</span>
+            <!-- TOP LOSERS (Explicit Border Added) -->
+            <div class="glass-panel rounded-2xl overflow-hidden flex flex-col h-full border border-gray-600 shadow-xl">
+                <div class="p-4 border-b border-gray-700/50 bg-black/20 flex justify-between items-center backdrop-blur-sm sticky top-0 z-20">
+                    <h2 class="text-lg font-bold text-red-400 flex items-center">
+                        <span class="w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse"></span>
+                        Top Losers
+                    </h2>
+                    <span class="text-[10px] uppercase font-bold text-gray-500 bg-gray-900/50 px-2 py-1 rounded border border-gray-800">Live Feed</span>
                 </div>
-                <div class="overflow-y-auto flex-1">
-                    <table class="min-w-full text-sm text-left text-gray-300">
-                        <thead class="bg-gray-900 text-xs uppercase text-gray-500 sticky top-0 z-10">
+                <div class="p-2">
+                    <table class="w-full text-sm text-left text-gray-300 border-separate border-spacing-y-1">
+                        <thead class="text-xs uppercase text-gray-500">
                             <tr>
-                                <th class="px-4 py-3">Symbol</th>
-                                <th class="px-4 py-3 text-right">LTP</th>
-                                <th class="px-4 py-3 text-center">% Chg</th>
-                                <th class="px-4 py-3 text-center">Day H/L</th>
-                                <th class="px-4 py-3 text-right">Start</th>
+                                <th class="px-4 py-2 font-semibold">Symbol</th>
+                                <th class="px-4 py-2 text-right font-semibold">LTP</th>
+                                <th class="px-4 py-2 text-center font-semibold">% Chg</th>
+                                <th class="px-4 py-2 text-center font-semibold">H/L %</th>
+                                <th class="px-4 py-2 text-right font-semibold">Action</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-700" id="losers-body">
-                            <tr><td colspan="5" class="p-8 text-center text-gray-500 italic">Connecting to Redis...</td></tr>
+                        <tbody id="losers-body">
+                            <tr><td colspan="5" class="p-8 text-center text-gray-500 text-xs">Waiting for Tick Data...</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        <div class="bg-gray-800 rounded-xl shadow-lg border border-gray-700 overflow-hidden">
-            <div class="p-5 border-b border-gray-700 bg-gray-800 flex justify-between items-center">
-                <h2 class="text-xl font-bold text-gray-100">Open Positions</h2>
-                <span class="bg-indigo-900/50 text-indigo-300 text-xs px-2 py-1 rounded border border-indigo-700">{{ open_positions|length }} Active</span>
+        <!-- 4. OPEN POSITIONS -->
+        <div class="glass-panel rounded-2xl overflow-hidden border border-gray-700">
+            <div class="p-5 border-b border-gray-700/50 bg-black/20 flex justify-between items-center">
+                <h2 class="text-lg font-bold text-white">Open Positions</h2>
+                <span class="bg-indigo-500/20 text-indigo-300 text-xs font-bold px-3 py-1 rounded-full border border-indigo-500/30">{{ open_positions|length }} Active</span>
             </div>
             <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-700">
-                    <thead class="bg-gray-900">
+                <table class="w-full text-sm text-left text-gray-300">
+                    <thead class="text-xs text-gray-500 uppercase bg-gray-900/50">
                         <tr>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Symbol</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Type / Qty</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">Entry</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">LTP</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase">P&L</th>
+                            <th class="px-6 py-4 font-semibold">Symbol</th>
+                            <th class="px-6 py-4 font-semibold">Type / Qty</th>
+                            <th class="px-6 py-4 font-semibold">Entry</th>
+                            <th class="px-6 py-4 font-semibold">LTP</th>
+                            <th class="px-6 py-4 font-semibold">P&L</th>
                         </tr>
                     </thead>
-                    <tbody class="bg-gray-800 divide-y divide-gray-700" id="positions-body">
+                    <tbody class="divide-y divide-gray-700/50" id="positions-body">
                         {% for pos in open_positions %}
-                        <tr class="hover:bg-gray-700 transition" id="pos-row-{{ pos.symbol.instrument_token }}">
+                        <tr class="hover:bg-white/5 transition" id="pos-row-{{ pos.symbol.instrument_token }}">
                             <td class="px-6 py-4 font-medium text-white">{{ pos.symbol.symbol }}</td>
                             <td class="px-6 py-4 font-bold {{ pos.trade_type|yesno:'text-green-400,text-red-400' }}">
                                 {{ pos.trade_type }} / {{ pos.quantity }}
                             </td>
-                            <td class="px-6 py-4 text-gray-300">{{ pos.entry_price }}</td>
-                            <td class="px-6 py-4 text-gray-300 font-mono ltp-val" id="ltp-{{ pos.symbol.instrument_token }}">--</td>
+                            <td class="px-6 py-4 text-gray-400">{{ pos.entry_price }}</td>
+                            <td class="px-6 py-4 text-gray-200 font-mono ltp-val" id="ltp-{{ pos.symbol.instrument_token }}">--</td>
                             <td class="px-6 py-4 font-bold font-mono pnl-val" id="pnl-{{ pos.symbol.instrument_token }}">--</td>
                         </tr>
                         {% empty %}
-                        <tr><td colspan="5" class="px-6 py-8 text-center text-gray-500 italic">No open positions right now.</td></tr>
+                        <tr><td colspan="5" class="px-6 py-8 text-center text-gray-500 text-xs italic">No open positions.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -158,145 +193,152 @@
         </div>
     </div>
 
-    <div id="strategyModal" class="fixed inset-0 bg-black/90 backdrop-blur-sm hidden flex items-center justify-center z-50">
-        <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 border border-gray-600">
-            <div class="p-6 border-b border-gray-700 bg-gray-900">
-                <h2 class="text-xl font-bold text-white flex items-center">
-                    <span id="stgAction" class="mr-2 px-2 py-1 rounded text-xs font-bold bg-gray-700 text-white">BUY</span>
-                    Strategy Settings
+    <!-- STRATEGY MODAL (Kept same logic) -->
+    <div id="strategyModal" class="fixed inset-0 bg-black/90 backdrop-blur-md hidden flex items-center justify-center z-50 transition-opacity">
+        <div class="glass-panel rounded-2xl shadow-2xl w-full max-w-sm mx-4 transform transition-all scale-100 border border-gray-700">
+            <div class="p-6 border-b border-gray-700/50">
+                <h2 class="text-lg font-bold text-white flex items-center justify-between">
+                    <span>Configure Strategy</span>
+                    <span id="stgAction" class="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">BUY</span>
                 </h2>
-                <p class="text-sm text-yellow-400 mt-1 font-bold" id="stgSymbol">LOADING...</p>
+                <p class="text-xs text-indigo-400 mt-1 font-bold tracking-wide" id="stgSymbol">RELIANCE</p>
             </div>
-            
-            <div class="p-6 space-y-4">
+            <div class="p-6 space-y-5">
                 <div>
-                    <label class="block text-sm font-medium text-gray-300 mb-1">Per Trade Capital (₹)</label>
-                    <input type="number" id="inputCapital" value="10000" step="1000" 
-                           class="w-full bg-gray-700 border border-gray-500 text-white p-3 rounded-lg focus:ring-2 focus:ring-green-500 outline-none font-mono text-lg">
+                    <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider">Capital per Trade (₹)</label>
+                    <input type="number" id="inputCapital" value="10000" step="1000" class="w-full bg-[#161b22] border border-gray-700 text-white p-3 rounded-xl focus:border-indigo-500 outline-none font-mono text-sm transition">
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-400 mb-1">Trailing SL (%)</label>
-                        <input type="number" id="inputTSL" value="1.0" step="0.1" 
-                               class="w-full bg-gray-700 border border-gray-600 text-white p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                        <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider">Trailing SL (%)</label>
+                        <input type="number" id="inputTSL" value="1.0" step="0.1" class="w-full bg-[#161b22] border border-gray-700 text-white p-3 rounded-xl focus:border-indigo-500 outline-none font-mono text-sm transition">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-400 mb-1">Increase (%)</label>
-                        <input type="number" id="inputIncrease" value="1.0" step="0.1" 
-                               class="w-full bg-gray-700 border border-gray-600 text-white p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                        <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider">Pyramid Add (%)</label>
+                        <input type="number" id="inputIncrease" value="1.0" step="0.1" class="w-full bg-[#161b22] border border-gray-700 text-white p-3 rounded-xl focus:border-indigo-500 outline-none font-mono text-sm transition">
                     </div>
                 </div>
             </div>
-
-            <div class="p-4 bg-gray-900 text-right border-t border-gray-700 flex justify-end space-x-3">
-                <button onclick="closeStrategyModal()" class="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600">Cancel</button>
-                <button onclick="confirmStrategyStart()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-500 font-bold shadow-lg">Confirm Start</button>
+            <div class="p-4 bg-black/20 text-right flex justify-end space-x-3 rounded-b-2xl">
+                <button onclick="closeStrategyModal()" class="px-4 py-2 text-gray-400 hover:text-white text-xs font-bold transition">Cancel</button>
+                <button onclick="confirmStrategyStart()" class="px-6 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 text-white rounded-lg font-bold shadow-lg shadow-indigo-900/30 text-xs tracking-wide transition transform hover:scale-105">Start Algorithm</button>
             </div>
         </div>
     </div>
 
-    <div id="addSymbolModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center z-50 transition-opacity duration-300">
-        <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl mx-4 transform transition-all border border-gray-600 overflow-hidden">
-            <div class="p-6 border-b border-gray-700 flex justify-between bg-gray-900">
-                <h2 class="text-xl font-bold text-white">Add New Scrip</h2>
-                <button onclick="closeModal()" class="text-gray-400 hover:text-white">&times;</button>
-            </div>
-            <div class="p-6 bg-gray-800">
-                <input type="text" id="searchInput" placeholder="Search (e.g. RELIANCE)..." class="w-full bg-gray-700 border border-gray-600 text-white p-4 rounded-lg outline-none">
-                <div id="searchResults" class="mt-4 border border-gray-600 rounded-lg max-h-60 overflow-y-auto hidden bg-gray-900 search-results shadow-lg"></div>
-            </div>
-            <div class="p-4 bg-gray-900 text-right border-t border-gray-700">
-                <button onclick="closeModal()" class="px-5 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition">Close</button>
-            </div>
-        </div>
-    </div>
 
+    <!-- JS LOGIC -->
     <script>
         // GLOBALS
         let selectedToken = null;
         let selectedAction = null;
 
-        // --- 1. OPEN STRATEGY MODAL ---
+        // --- RENDER TABLE (UPDATED COLORS AND SIZES) ---
+        function renderTable(id, items, action) {
+            const tbody = document.getElementById(id);
+            if(!tbody) return;
+            if(items.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-gray-500 text-xs italic">Waiting for data...</td></tr>`; return; }
+            
+            let html = '';
+            items.forEach(stock => {
+                let rowBgClass = 'bg-[#161b22]/40 hover:bg-[#161b22]/80';
+                let textClass = 'text-gray-300'; 
+
+                // 1. Color Logic (Price Action) - EQUITY
+                if(stock.color === 'DARKGREEN') {
+                    rowBgClass = 'bg-green-900/20 hover:bg-green-900/30 border-l-4 border-green-500';
+                    textClass = 'text-green-300 font-bold';
+                } else if(stock.color === 'BROWN') {
+                    textClass = 'text-amber-500 font-bold'; 
+                } else if(stock.color === 'RED') {
+                    textClass = 'text-red-500 font-bold';
+                }
+                
+                // 2. F&O Logic (Dark Blue Background + Blue Badge)
+                let fnoBadge = '';
+                if (stock.is_fno || stock.border === 'BLUE') {
+                    // OVERRIDE background for F&O to Dark Blue
+                    rowBgClass = 'bg-blue-900/20 hover:bg-blue-900/30 border-l-4 border-blue-500'; 
+                    textClass = 'text-blue-200 font-bold'; // Blue-ish text
+                    fnoBadge = '<span class="ml-2 text-[9px] bg-blue-600/30 text-blue-200 border border-blue-500/50 px-1.5 py-0.5 rounded font-bold tracking-wide">FnO</span>';
+                }
+
+                html += `
+                <tr class="transition duration-150 group rounded-xl mb-1 ${rowBgClass}">
+                    <td class="px-4 py-3 font-medium flex items-center ${textClass}">
+                        ${stock.symbol} ${fnoBadge}
+                    </td>
+                    <td class="px-4 py-3 font-mono text-gray-300 text-right">₹ ${stock.ltp.toFixed(2)}</td>
+                    <td class="px-4 py-3 font-bold text-center ${stock.pct_change > 0 ? 'text-green-400' : 'text-red-400'}">
+                        ${stock.pct_change > 0 ? '+' : ''}${stock.pct_change.toFixed(2)}%
+                    </td>
+                    <!-- INCREASED SIZE FOR H/L % -->
+                    <td class="px-4 py-3 text-center font-mono">
+                        <div class="text-sm font-semibold text-gray-400">H: <span class="${stock.pct_from_high > -1 ? 'text-green-400' : 'text-red-400'}">${stock.pct_from_high.toFixed(2)}%</span></div>
+                        <div class="text-sm font-semibold text-gray-400">L: <span class="${stock.pct_from_low > 1 ? 'text-green-400' : 'text-red-400'}">+${stock.pct_from_low.toFixed(2)}%</span></div>
+                    </td>
+                    <td class="px-4 py-3 text-right">
+                        <button onclick="triggerLadder('${stock.token}', '${stock.symbol}', '${action}')" 
+                                class="${action === 'BUY' ? 'bg-green-600/80 hover:bg-green-500' : 'bg-red-600/80 hover:bg-red-500'} 
+                                       text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-lg transition transform active:scale-95 tracking-wide">
+                            ${action}
+                        </button>
+                    </td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+        }
+
+        // --- REST OF THE JS LOGIC ---
         function triggerLadder(token, symbol, action) {
             selectedToken = token;
             selectedAction = action;
-            
-            // Set Symbol Name dynamically
             document.getElementById('stgSymbol').innerText = symbol;
-            
-            // Set Badge
             const badge = document.getElementById('stgAction');
             badge.innerText = action;
-            badge.className = `mr-2 px-2 py-1 rounded text-xs font-bold text-white ${action === 'BUY' ? 'bg-green-600' : 'bg-red-600'}`;
-            
-            // Show
+            badge.className = `px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider text-white ${action === 'BUY' ? 'bg-green-600' : 'bg-red-600'}`;
             document.getElementById('strategyModal').classList.remove('hidden');
         }
-
         function closeStrategyModal() { document.getElementById('strategyModal').classList.add('hidden'); }
 
-        // --- 2. CONFIRM START ---
         async function confirmStrategyStart() {
             const capital = document.getElementById('inputCapital').value;
             const tsl = document.getElementById('inputTSL').value;
             const increase = document.getElementById('inputIncrease').value;
-
             if(!capital || capital < 500) { alert("Invalid Capital (Min 500)"); return; }
-
             closeStrategyModal();
-
             try {
                 const res = await fetch(window.location.origin + '/api/trigger-ladder/', {
                     method: 'POST',
-                    body: JSON.stringify({ 
-                        token: selectedToken, 
-                        action: selectedAction,
-                        capital: capital,
-                        tsl: tsl,
-                        increase: increase
-                    }),
+                    body: JSON.stringify({ token: selectedToken, action: selectedAction, capital: capital, tsl: tsl, increase: increase }),
                     headers: { 'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json' }
                 });
                 const data = await res.json();
-                
-                if(data.status === 'success') {
-                    alert("✅ Ladder Started: " + data.message);
-                    refreshDashboard(); // Instant refresh
-                } else {
-                    alert("❌ Error: " + data.message);
-                }
-            } catch(e) { alert("Network Error: Check Console"); console.error(e); }
+                if(data.status === 'success') { alert("✅ Started: " + data.message); refreshDashboard(); } 
+                else { alert("❌ Error: " + data.message); }
+            } catch(e) { console.error(e); }
         }
 
-        // --- 3. AJAX AUTO REFRESH ---
         async function refreshDashboard() {
             try {
                 const res = await fetch(window.location.origin + '/api/dashboard-data/');
                 if(!res.ok) return;
                 const data = await res.json();
-
                 if(data.status === 'success') {
-                    // Update P&L
                     document.getElementById('realized_pnl').innerText = `₹ ${data.realized_pnl}`;
                     const upnl = document.getElementById('unrealized_pnl');
                     upnl.innerText = `₹ ${data.unrealized_pnl}`;
-                    upnl.className = `text-4xl font-extrabold mt-2 tracking-tight ${data.unrealized_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`;
-
-                    // Update Scanners
+                    upnl.className = `text-4xl font-bold mt-2 tracking-tight ${data.unrealized_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`;
                     renderTable('gainers-body', data.gainers, 'BUY');
                     renderTable('losers-body', data.losers, 'SELL');
-                    
-                    // Update Open Positions
                     data.positions.forEach(pos => {
                         const ltpEl = document.getElementById(`ltp-${pos.id}`);
                         const pnlEl = document.getElementById(`pnl-${pos.id}`);
                         if(ltpEl) {
-                            // Flash Animation
                             let oldVal = parseFloat(ltpEl.innerText);
                             if(pos.ltp > oldVal) ltpEl.parentElement.classList.add('flash-up');
                             else if(pos.ltp < oldVal) ltpEl.parentElement.classList.add('flash-down');
                             setTimeout(() => ltpEl.parentElement.classList.remove('flash-up', 'flash-down'), 1000);
-                            
                             ltpEl.innerText = pos.ltp;
                         }
                         if(pnlEl) {
@@ -305,76 +347,18 @@
                         }
                     });
                 }
-            } catch(e) {
-                console.log("Polling error (harmless if page closed):", e);
-            }
+            } catch(e) { console.log("Polling...", e); }
         }
-
-        // --- 4. RENDER TABLE ---
-        function renderTable(id, items, action) {
-            const tbody = document.getElementById(id);
-            if(!tbody) return;
-            if(items.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-gray-500 italic">Waiting for data...</td></tr>`; return; }
-            
-            let html = '';
-            items.forEach(stock => {
-                // Color & Style Logic
-                let textClass = 'text-gray-200'; 
-                let rowBgClass = 'hover:bg-gray-700';
-
-                if(stock.color === 'DARKGREEN') {
-                    rowBgClass = 'bg-green-900/40 hover:bg-green-900/60';
-                    textClass = 'text-green-300 font-extrabold';
-                } else if(stock.color === 'BROWN') {
-                    textClass = 'text-amber-500 font-bold'; 
-                } else if(stock.color === 'RED') {
-                    textClass = 'text-red-500 font-bold';
-                }
-                
-                let borderClass = 'border-b border-gray-700';
-                let fnoBadge = '';
-                
-                if (stock.is_fno || stock.border === 'BLUE') {
-                    borderClass = 'border-2 border-blue-500/50 bg-blue-900/10';
-                    fnoBadge = '<span class="ml-2 text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-bold tracking-wide shadow">FnO</span>';
-                }
-
-                html += `
-                <tr class="transition duration-150 group ${borderClass} ${rowBgClass}">
-                    <td class="px-4 py-3 font-bold group-hover:text-white flex items-center ${textClass}">
-                        ${stock.symbol} ${fnoBadge}
-                    </td>
-                    <td class="px-4 py-3 font-mono text-gray-300 text-right">₹ ${stock.ltp.toFixed(2)}</td>
-                    <td class="px-4 py-3 font-bold text-center ${stock.pct_change > 0 ? 'text-green-400' : 'text-red-400'}">
-                        ${stock.pct_change > 0 ? '+' : ''}${stock.pct_change.toFixed(2)}%
-                    </td>
-                    <td class="px-4 py-3 text-xs text-center font-mono">
-                        <div class="text-gray-400">H: <span class="${stock.pct_from_high > -1 ? 'text-green-400' : 'text-red-400'}">${stock.pct_from_high.toFixed(2)}%</span></div>
-                        <div class="text-gray-400">L: <span class="${stock.pct_from_low > 1 ? 'text-green-400' : 'text-red-400'}">+${stock.pct_from_low.toFixed(2)}%</span></div>
-                    </td>
-                    <td class="px-4 py-3 text-right">
-                        <button onclick="triggerLadder('${stock.token}', '${stock.symbol}', '${action}')" 
-                                class="${action === 'BUY' ? 'bg-green-600 hover:bg-green-500 shadow-green-900/50' : 'bg-red-600 hover:bg-red-500 shadow-red-900/50'} 
-                                       text-white px-4 py-1.5 rounded-md text-xs font-bold shadow-lg transition transform active:scale-95 tracking-wide">
-                            ${action}
-                        </button>
-                    </td>
-                </tr>`;
-            });
-            tbody.innerHTML = html;
-        }
-        
         setInterval(refreshDashboard, 2000);
         refreshDashboard();
 
-        // --- UTILS (Modal, Search, KillSwitch) ---
+        // Utils
         const modal = document.getElementById('addSymbolModal');
         const searchInput = document.getElementById('searchInput');
         const searchResults = document.getElementById('searchResults');
         let debounceTimer;
         function openModal() { modal.classList.remove('hidden'); searchInput.focus(); }
         function closeModal() { modal.classList.add('hidden'); searchInput.value=''; searchResults.classList.add('hidden'); }
-        
         searchInput.addEventListener('input', (e) => {
             clearTimeout(debounceTimer);
             if(e.target.value.length < 2) { searchResults.classList.add('hidden'); return; }
@@ -382,32 +366,30 @@
                 const res = await fetch(window.location.origin + `/api/search-instruments/?q=${e.target.value}`);
                 const data = await res.json();
                 searchResults.innerHTML = '';
+                searchResults.classList.remove('hidden');
                 data.forEach(item => {
                     const div = document.createElement('div');
-                    div.className = 'p-3 hover:bg-gray-700 cursor-pointer border-b border-gray-700 flex justify-between';
-                    div.innerHTML = `<span class="font-bold text-white">${item.value.symbol}</span><button class="text-xs bg-indigo-600 px-2 py-1 rounded text-white">Add</button>`;
+                    div.className = 'p-3 hover:bg-gray-700/50 cursor-pointer border-b border-gray-800 flex justify-between items-center transition rounded-lg mx-1';
+                    div.innerHTML = `<span class="font-bold text-gray-300 text-sm">${item.value.symbol}</span><button class="text-[10px] bg-indigo-600 px-2 py-1 rounded text-white font-bold">ADD</button>`;
                     div.onclick = async () => {
                         await fetch(window.location.origin + '/api/add-symbol/', { method: 'POST', body: JSON.stringify({instrument: item.value}), headers: { 'X-CSRFToken': '{{ csrf_token }}' } });
                         closeModal();
                     };
                     searchResults.appendChild(div);
                 });
-                searchResults.classList.remove('hidden');
             }, 300);
         });
-
         async function toggleKillSwitch() {
              const checkbox = document.getElementById('killSwitch');
              const label = document.getElementById('statusLabel');
              const rail = document.getElementById('toggleRail');
              const knob = document.getElementById('toggleKnob');
-             
              if (checkbox.checked) {
                 rail.classList.remove('bg-red-900'); rail.classList.add('bg-green-600');
-                knob.style.transform = 'translateX(100%)'; label.innerHTML = '<span class="text-green-400 drop-shadow-md">LIVE TRADING ON</span>';
+                knob.style.transform = 'translateX(100%)'; label.innerHTML = '<span class="text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.5)]">Live Trading ON</span>';
             } else {
                 rail.classList.remove('bg-green-600'); rail.classList.add('bg-red-900');
-                knob.style.transform = 'translateX(0)'; label.innerHTML = '<span class="text-red-500 drop-shadow-md">STOPPED (KILL SWITCH)</span>';
+                knob.style.transform = 'translateX(0)'; label.innerHTML = '<span class="text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]">System Halted</span>';
             }
              try { await fetch(window.location.origin + '/api/toggle-kill-switch/', { method: 'POST', headers: { 'X-CSRFToken': '{{ csrf_token }}' } }); } catch(e){}
         }
