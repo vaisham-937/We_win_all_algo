@@ -28,8 +28,10 @@ urlpatterns = [
     path('api/pnl/', views.get_realtime_pnl, name='api_pnl'),
     path('api/search-instruments/', views.search_instruments, name='search_instruments'),
     path('api/add-symbol/', views.add_symbol, name='add_symbol'),
-    path('api/remove-symbol/', views.remove_symbol, name='remove_symbol'),
     path('api/toggle-kill-switch/', views.toggle_kill_switch, name='toggle_kill_switch'),
 
+    path('api/webhook/chartink/', views.chartink_webhook, name='chartink_webhook'),
+    path('api/get-alerts/', views.get_alerts_api, name='get_alerts_api'),
+    path('api/execute-alert-trade/', views.execute_alert_trade, name='execute_alert_trade'),
+
 ]
-# path('trading/auth/callback/', views.kite_callback, name='kite_callback_legacy'),

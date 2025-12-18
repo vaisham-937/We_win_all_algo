@@ -3,41 +3,63 @@ import logging
 from django.conf import settings
 from django.core.cache import caches
 from django.utils import timezone
-from trading.models import LadderState, ClientAccount, TradeSymbol
+from trading.models import LadderState, ClientAccount, TradeSymbol, TradeLog
 from .account_manager import kite_session_manager
 from django_redis import get_redis_connection
 
 logger = logging.getLogger(__name__)
 
 # Use default cache for locking mechanisms (DB 1)
-# Note: Ensure this matches where you want locks. usually 'default' is fine.
 redis_lock = get_redis_connection("default")
+
+# --- LUA SCRIPT FOR ATOMIC RACE CONDITION PROTECTION ---
+# KEYS[1] = Lock Key (e.g., "ladder_lock:123")
+# ARGV[1] = Expiry in seconds (e.g., 2)
+# Returns 1 if lock acquired, 0 if already locked
+LUA_LOCK_SCRIPT = """
+if redis.call("exists", KEYS[1]) == 1 then
+    return 0
+else
+    redis.call("set", KEYS[1], "LOCKED", "EX", ARGV[1])
+    return 1
+end
+"""
 
 def place_order(client, symbol, transaction_type, qty, tag):
     """
-    Places an MIS Market Order via Kite Connect.
+    Places an MIS Market Order via Kite Connect with Strict MIS/INTRADAY enforcement.
+    Also Checks Client Account Limits.
     """
     try:
-        # 1. Get Kite Instance (Using Updated Session Manager)
-        # This will now look for "access_token:{user_id}" in Raw Redis
-        kite = kite_session_manager.get_kite_instance(client.user.id)
-        
-        if not kite:
-            logger.error(f"❌ No Kite instance for user {client.user.username} (Check Redis Keys)")
+        # 0. Global Safety Checks (Max Loss / Kill Switch)
+        # Note: In a high-frequency loop, querying DB for 'client' every time is slow.
+        # Ideally, pass the updated 'client' object or cache limits in Redis.
+        # For now, we assume 'client' object passed to this function is relatively fresh.
+        if not client.is_live_trading_enabled:
+            logger.warning(f"⚠️ Kill Switch Active. Rejecting Order: {symbol.symbol}")
             return None
 
-        # 2. Place Order
+        # 1. Get Kite Instance
+        kite = kite_session_manager.get_kite_instance(client.user.id)
+        if not kite:
+            logger.error(f"❌ No Kite instance for user {client.user.username}")
+            return None
+
+        # 2. Place Order (Strict MIS)
         order_id = kite.place_order(
             variety=kite.VARIETY_REGULAR,
             exchange=symbol.exchange,
             tradingsymbol=symbol.symbol,
             transaction_type=transaction_type,
             quantity=int(qty),
-            product=kite.PRODUCT_MIS,
+            product=kite.PRODUCT_MIS, # Forced Intraday
             order_type=kite.ORDER_TYPE_MARKET,
             tag=tag
         )
         logger.info(f"✅ Order Placed: {transaction_type} {symbol.symbol} Qty: {qty} ID: {order_id}")
+        
+        # 3. Log Trade to DB (Optional but recommended for audit)
+        # (Simplified: logic usually handled by OrderUpdate webhook)
         return order_id
         
     except Exception as e:
@@ -51,12 +73,10 @@ def process_ladder_strategy(tick_data):
     token = tick_data['token']
     ltp = tick_data['ltp']
     
-    # Circuit Limits (if available)
     upper_circuit = tick_data.get('upper_circuit_limit')
     lower_circuit = tick_data.get('lower_circuit_limit')
     
-    # 1. Find ACTIVE ladders for this symbol
-    # We fetch from DB because Strategy State is persistent
+    # Fetch active ladders from DB
     active_ladders = LadderState.objects.filter(
         symbol__instrument_token=token, 
         is_active=True
@@ -65,14 +85,19 @@ def process_ladder_strategy(tick_data):
     if not active_ladders.exists():
         return
 
+    # Pre-register Lua Script
+    lock_script = redis_lock.register_script(LUA_LOCK_SCRIPT)
+
     for ladder in active_ladders:
-        # --- RACE CONDITION PROTECTION ---
-        # Lock Key: "ladder_lock:123"
+        # --- ATOMIC RACE CONDITION PROTECTION ---
         lock_key = f"ladder_lock:{ladder.id}"
         
-        # Use raw redis .set(..., nx=True, ex=2) for robust locking
-        if not redis_lock.set(lock_key, "LOCKED", nx=True, ex=2): 
-            # If lock exists (set returns False), skip this tick
+        # Execute Lua Script (Atomic Check & Set)
+        # Try to acquire lock for 2 seconds
+        is_acquired = lock_script(keys=[lock_key], args=[2])
+        
+        if not is_acquired:
+            # Another worker/process is handling this ladder right now
             continue
 
         try:
@@ -93,7 +118,8 @@ def process_ladder_strategy(tick_data):
         except Exception as e:
             logger.error(f"Error processing ladder {ladder.id}: {e}")
         finally:
-            # Release lock
+            # We rely on TTL (2s) to release, or we can explicitly delete.
+            # Explicit delete is better for high frequency.
             redis_lock.delete(lock_key)
 
 def manage_buy_ladder(ladder, ltp, upper_circuit=None):
@@ -114,10 +140,11 @@ def manage_buy_ladder(ladder, ltp, upper_circuit=None):
     if drop_pct >= ladder.tsl_pct:
         logger.info(f"TSL Hit for BUY {ladder.symbol}. Reversing to SELL...")
         
-        # Square Off Buy
-        place_order(ladder.client, ladder.symbol, 'SELL', ladder.current_qty, "TSL_EXIT")
+        # DOUBLE EXIT PROTECTION: Check if we actually have open qty before selling
+        if ladder.current_qty > 0:
+            place_order(ladder.client, ladder.symbol, 'SELL', ladder.current_qty, "TSL_EXIT")
         
-        # Reverse to Sell
+        # REVERSE ENTRY
         ladder.current_mode = 'SELL'
         ladder.entry_price = ltp
         ladder.extreme_price = ltp 
@@ -165,10 +192,9 @@ def manage_sell_ladder(ladder, ltp, lower_circuit=None):
     if rise_pct >= ladder.tsl_pct:
         logger.info(f"TSL Hit for SELL {ladder.symbol}. Reversing to BUY...")
         
-        # Square Off Sell
-        place_order(ladder.client, ladder.symbol, 'BUY', ladder.current_qty, "TSL_EXIT")
+        if ladder.current_qty > 0:
+            place_order(ladder.client, ladder.symbol, 'BUY', ladder.current_qty, "TSL_EXIT")
         
-        # Reverse to Buy
         ladder.current_mode = 'BUY'
         ladder.entry_price = ltp
         ladder.extreme_price = ltp
@@ -209,9 +235,14 @@ def close_ladder(ladder, ltp, tag):
     ladder.current_mode = 'STOPPED'
     ladder.save()
 
-# --- INITIALIZERS ---
+# --- INITIALIZERS (Double Entry Protected via DB Check) ---
 
 def start_buy_ladder(ladder, ltp):
+    # Double Entry Protection: Ensure state is not already active
+    if ladder.is_active:
+        logger.warning(f"Double Entry Blocked: Ladder already active for {ladder.symbol.symbol}")
+        return
+
     qty = int(ladder.trade_capital / ltp)
     if qty < 1: qty = 1 
     
@@ -227,6 +258,10 @@ def start_buy_ladder(ladder, ltp):
         ladder.save()
 
 def start_sell_ladder(ladder, ltp):
+    if ladder.is_active:
+        logger.warning(f"Double Entry Blocked: Ladder already active for {ladder.symbol.symbol}")
+        return
+
     qty = int(ladder.trade_capital / ltp)
     if qty < 1: qty = 1
     

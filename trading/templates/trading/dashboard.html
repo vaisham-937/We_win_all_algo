@@ -1,4 +1,3 @@
-{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,186 +5,253 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Algo Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Outfit', sans-serif; }
-        
-        /* Glassmorphism Classes */
-        .glass-panel {
-            background: rgba(31, 41, 55, 0.4);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.05);
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        gray: { 850: '#1a1d24', 900: '#111318', 950: '#0b0c10' }
+                    }
+                }
+            }
         }
-        
-        /* Scrollbar */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #0f1115; }
-        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
-        
-        /* Toggle Switch Animation */
-        .dot { top: 0.25rem; left: 0.25rem; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-        input:checked ~ .dot { transform: translateX(100%); }
-        
-        /* Flash Animations */
-        @keyframes flash-green { 0% { background-color: rgba(34, 197, 94, 0.2); } 100% { background-color: transparent; } }
-        @keyframes flash-red { 0% { background-color: rgba(239, 68, 68, 0.2); } 100% { background-color: transparent; } }
-        .flash-up { animation: flash-green 1s ease-out; }
-        .flash-down { animation: flash-red 1s ease-out; }
+    </script>
+    <style>
+        body { background-color: #0b0c10; color: #e5e7eb; }
+        .glass-panel {
+            background: rgba(23, 25, 30, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 99px; }
+        @keyframes flash-green { 0% { background-color: rgba(16, 185, 129, 0.25); } 100% { background-color: transparent; } }
+        @keyframes flash-red { 0% { background-color: rgba(239, 68, 68, 0.25); } 100% { background-color: transparent; } }
+        .flash-up { animation: flash-green 0.8s ease-out; }
+        .flash-down { animation: flash-red 0.8s ease-out; }
+        .glow-text-green { text-shadow: 0 0 10px rgba(74, 222, 128, 0.4); }
+        .glow-text-red { text-shadow: 0 0 10px rgba(248, 113, 113, 0.4); }
     </style>
 </head>
-<body class="bg-[#0f1115] text-gray-100 min-h-screen relative selection:bg-indigo-500 selection:text-white">
+<body class="min-h-screen relative overflow-x-hidden">
     
-    <!-- Background Glows -->
-    <div class="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
-        <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-900/10 rounded-full blur-[120px]"></div>
-        <div class="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-900/10 rounded-full blur-[120px]"></div>
+    <div class="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+        <div class="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-blue-900/10 rounded-full blur-[150px] animate-pulse" style="animation-duration: 8s;"></div>
+        <div class="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-indigo-900/10 rounded-full blur-[150px] animate-pulse" style="animation-duration: 10s;"></div>
     </div>
 
-    <div class="max-w-7xl mx-auto space-y-8 p-4 md:p-8">
+    <div class="max-w-[1600px] mx-auto p-4 md:p-6 space-y-6">
         
-        <!-- 1. HEADER -->
-        <header class="glass-panel p-5 rounded-2xl flex flex-col md:flex-row justify-between items-center shadow-2xl space-y-4 md:space-y-0">
-            <div>
-                <h1 class="text-2xl font-bold text-white tracking-wide flex items-center">
-                    Algo Dashboard <span class="mx-3 text-gray-600 text-lg">|</span> <span class="text-indigo-400 font-medium">{{ user.username }}</span>
-                </h1>
-                
-                <!-- Kill Switch -->
-                <div class="flex items-center mt-3 bg-[#161b22]/80 p-2 rounded-xl border border-gray-700/50 inline-flex">
-                    <label for="killSwitch" class="flex items-center cursor-pointer relative">
-                        <input type="checkbox" id="killSwitch" class="sr-only" 
+        <header class="glass-panel rounded-2xl p-4 md:p-6 flex flex-col xl:flex-row justify-between items-center gap-6 relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent"></div>
+
+            <div class="flex flex-col md:flex-row items-center gap-6 w-full xl:w-auto">
+                <div>
+                    <h1 class="text-2xl md:text-3xl font-bold text-white tracking-tight flex items-center gap-3">
+                        <span class="bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-blue-400">AlgoTrade</span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-gray-800 text-gray-400 border border-gray-700 font-mono">PRO</span>
+                    </h1>
+                    <div class="flex items-center gap-2 text-sm text-gray-400 mt-1">
+                        <span class="font-medium">{{ user.username }}</span>
+                    </div>
+                </div>
+
+                <div class="h-10 w-[1px] bg-gray-700 hidden md:block"></div>
+
+                <div class="flex items-center bg-gray-900/50 p-2 pr-4 rounded-xl border border-gray-700/50 shadow-inner">
+                    <label for="killSwitch" class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="killSwitch" class="sr-only peer" 
                                {% if account.is_live_trading_enabled %}checked{% endif %} 
                                onchange="toggleKillSwitch()">
-                        <div class="w-14 h-7 bg-gray-700 rounded-full shadow-inner transition-colors duration-300" id="toggleRail"></div>
-                        <div class="dot absolute w-5 h-5 bg-white rounded-full shadow-md" id="toggleKnob"></div>
+                        <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 shadow-lg"></div>
                     </label>
-                    <div class="ml-3 font-bold text-xs tracking-wider uppercase" id="statusLabel">
+                    <div class="ml-3 flex flex-col" id="statusLabel">
                         {% if account.is_live_trading_enabled %}
-                            <span class="text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.5)]">Live Trading ON</span>
+                            <span class="text-[10px] uppercase font-bold text-emerald-500 tracking-wider glow-text-green">System Active</span>
+                            <span class="text-[9px] text-gray-400 font-mono">Live Execution ON</span>
                         {% else %}
-                            <span class="text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]">System Halted</span>
+                            <span class="text-[10px] uppercase font-bold text-red-500 tracking-wider glow-text-red">System Halted</span>
+                            <span class="text-[9px] text-gray-400 font-mono">Execution STOPPED</span>
                         {% endif %}
                     </div>
                 </div>
             </div>
 
-            <!-- Controls -->
-            <div class="flex space-x-3">
-                <a href="{% url 'credentials' %}" class="glass-panel hover:bg-gray-700/50 text-gray-200 px-5 py-2.5 rounded-xl transition text-sm font-medium flex items-center">
-                    Settings
+            <div class="flex flex-wrap items-center justify-center xl:justify-end gap-3 w-full xl:w-auto">
+                <div class="flex items-center bg-gray-900/50 rounded-lg border border-gray-700/50 px-3 py-2 shadow-sm focus-within:border-indigo-500/50 transition">
+                    <span class="text-gray-500 text-xs font-bold uppercase mr-2 tracking-wider">Min Vol</span>
+                    <input type="number" id="minVolumeFilter" placeholder="0" class="bg-transparent border-none text-white text-sm w-28 focus:ring-0 font-mono text-right placeholder-gray-600">
+                </div>
+                <div class="flex flex-col items-end px-3">
+                    <span class="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Last Sync</span>
+                    <span id="last-updated-time" class="text-indigo-400 font-mono text-sm font-bold">--:--:--</span>
+                </div>
+                 <a href="{% url 'credentials' %}" class="p-2.5 text-gray-400 hover:text-white glass-panel hover:bg-white/5 rounded-lg transition" title="Settings">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                 </a>
-                <a href="{% url 'logout' %}" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-3 py-2.5 rounded-xl border border-red-500/20 transition">
+                <a href="{% url 'logout' %}" class="p-2.5 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition" title="Logout">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                 </a>
             </div>
         </header>
 
-        <!-- 2. P&L CARDS -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="glass-panel p-6 rounded-2xl relative overflow-hidden group">
-                <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
-                    <svg class="w-24 h-24 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"></path></svg>
+            <div class="glass-panel rounded-2xl p-6 relative overflow-hidden group hover:border-emerald-500/30 transition duration-500">
+                <div class="absolute right-0 top-0 p-6 opacity-5 group-hover:opacity-10 transition duration-500 transform group-hover:scale-110">
+                    <svg class="w-32 h-32 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"></path></svg>
                 </div>
-                <h3 class="text-gray-400 text-xs font-bold uppercase tracking-wider">Realized P&L (Today)</h3>
-                <p class="text-4xl font-bold text-white mt-2 tracking-tight" id="realized_pnl">₹ {{ realized_pnl }}</p>
+                <div class="relative z-10">
+                    <h3 class="text-gray-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Realized P&L (Today)
+                    </h3>
+                    <div class="mt-3 flex items-baseline gap-1">
+                        <span class="text-4xl md:text-5xl font-bold text-white font-mono tracking-tighter" id="realized_pnl">₹ {{ realized_pnl }}</span>
+                        <span class="text-xs text-gray-500 font-mono uppercase">INR</span>
+                    </div>
+                </div>
+                <div class="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-600/50 to-transparent opacity-50"></div>
             </div>
-            <div class="glass-panel p-6 rounded-2xl relative overflow-hidden group">
-                <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
-                    <svg class="w-24 h-24 text-yellow-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd"></path></svg>
+
+            <div class="glass-panel rounded-2xl p-6 relative overflow-hidden group hover:border-indigo-500/30 transition duration-500">
+                <div class="absolute right-0 top-0 p-6 opacity-5 group-hover:opacity-10 transition duration-500 transform group-hover:scale-110">
+                    <svg class="w-32 h-32 text-indigo-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd"></path></svg>
                 </div>
-                <h3 class="text-gray-400 text-xs font-bold uppercase tracking-wider">Unrealized P&L (Open)</h3>
-                <p class="text-4xl font-bold text-white mt-2 tracking-tight" id="unrealized_pnl">Loading...</p>
+                <div class="relative z-10">
+                    <h3 class="text-gray-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span> Unrealized P&L (Open)
+                    </h3>
+                    <div class="mt-3">
+                        <span class="text-4xl md:text-5xl font-bold font-mono tracking-tighter" id="unrealized_pnl">Loading...</span>
+                    </div>
+                </div>
+                <div class="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-600/50 to-transparent opacity-50"></div>
             </div>
         </div>
 
-        <!-- 3. LIVE SCANNERS -->
+        <div class="glass-panel rounded-2xl overflow-hidden border-t-2 border-t-indigo-500/20">
+            <div class="p-4 border-b border-gray-700/50 bg-black/20 flex justify-between items-center">
+                <h2 class="text-lg font-bold text-white flex items-center gap-3">
+                    <div class="p-1.5 bg-indigo-500/10 rounded-lg border border-indigo-500/20 text-indigo-400">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+                    </div>
+                    Chartink Live Alerts
+                </h2>
+                <span class="text-[10px] uppercase font-bold text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded border border-indigo-500/20">Webhook Connected</span>
+            </div>
+            <div class="p-4">
+                <div id="alerts-container" class="flex gap-4 overflow-x-auto pb-2 scrollbar-thin">
+                    <div class="min-w-[300px] p-8 text-center text-gray-600 text-xs italic">
+                        Waiting for signals...
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             
-            <!-- TOP GAINERS (Explicit Border Added) -->
-            <div class="glass-panel rounded-2xl overflow-hidden flex flex-col h-full border border-gray-600 shadow-xl">
+            <div class="glass-panel rounded-2xl flex flex-col border-t-2 border-t-emerald-500/20">
                 <div class="p-4 border-b border-gray-700/50 bg-black/20 flex justify-between items-center backdrop-blur-sm sticky top-0 z-20">
-                    <h2 class="text-lg font-bold text-green-400 flex items-center">
-                        <span class="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
+                    <h2 class="text-lg font-bold text-white flex items-center gap-3">
+                        <div class="p-1.5 bg-emerald-500/10 rounded-lg border border-emerald-500/20 text-emerald-400">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                        </div>
                         Top Gainers
                     </h2>
-                    <span class="text-[10px] uppercase font-bold text-gray-500 bg-gray-900/50 px-2 py-1 rounded border border-gray-800">Live Feed</span>
+                    <span class="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20">Bullish</span>
                 </div>
-                <div class="p-2">
+                <div class="p-4"> 
                     <table class="w-full text-sm text-left text-gray-300 border-separate border-spacing-y-1">
-                        <thead class="text-xs uppercase text-gray-500">
+                        <thead class="text-[10px] uppercase text-gray-500 sticky top-0 bg-[#111318] z-10 shadow-sm">
                             <tr>
-                                <th class="px-4 py-2 font-semibold">Symbol</th>
-                                <th class="px-4 py-2 text-right font-semibold">LTP</th>
-                                <th class="px-4 py-2 text-center font-semibold">% Chg</th>
-                                <th class="px-4 py-2 text-center font-semibold">H/L %</th>
-                                <th class="px-4 py-2 text-right font-semibold">Action</th>
+                                <th class="px-3 py-2 font-semibold tracking-wider">Symbol</th>
+                                <th class="px-3 py-2 text-right font-semibold tracking-wider">LTP</th>
+                                <th class="px-3 py-2 text-center font-semibold tracking-wider">% Chg</th>
+                                <th class="px-3 py-2 text-right font-semibold tracking-wider hidden sm:table-cell">% > Low</th>
+                                <th class="px-3 py-2 text-right font-semibold tracking-wider hidden sm:table-cell">Vol (L)</th>
+                                <th class="px-3 py-2 text-right font-semibold tracking-wider hidden sm:table-cell">T/O (Cr)</th>
+                                <th class="px-3 py-2 text-right font-semibold tracking-wider">Exec</th>
                             </tr>
                         </thead>
-                        <tbody id="gainers-body">
-                            <tr><td colspan="5" class="p-8 text-center text-gray-500 text-xs">Waiting for Tick Data...</td></tr>
-                        </tbody>
+                        <tbody id="gainers-body"></tbody>
                     </table>
                 </div>
             </div>
 
-            <!-- TOP LOSERS (Explicit Border Added) -->
-            <div class="glass-panel rounded-2xl overflow-hidden flex flex-col h-full border border-gray-600 shadow-xl">
+            <div class="glass-panel rounded-2xl flex flex-col border-t-2 border-t-red-500/20">
                 <div class="p-4 border-b border-gray-700/50 bg-black/20 flex justify-between items-center backdrop-blur-sm sticky top-0 z-20">
-                    <h2 class="text-lg font-bold text-red-400 flex items-center">
-                        <span class="w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse"></span>
+                    <h2 class="text-lg font-bold text-white flex items-center gap-3">
+                        <div class="p-1.5 bg-red-500/10 rounded-lg border border-red-500/20 text-red-400">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"></path></svg>
+                        </div>
                         Top Losers
                     </h2>
-                    <span class="text-[10px] uppercase font-bold text-gray-500 bg-gray-900/50 px-2 py-1 rounded border border-gray-800">Live Feed</span>
+                    <span class="text-[10px] uppercase font-bold text-red-400 bg-red-500/10 px-2 py-1 rounded border border-red-500/20">Bearish</span>
                 </div>
-                <div class="p-2">
+                <div class="p-4">
                     <table class="w-full text-sm text-left text-gray-300 border-separate border-spacing-y-1">
-                        <thead class="text-xs uppercase text-gray-500">
+                        <thead class="text-[10px] uppercase text-gray-500 sticky top-0 bg-[#111318] z-10 shadow-sm">
                             <tr>
-                                <th class="px-4 py-2 font-semibold">Symbol</th>
-                                <th class="px-4 py-2 text-right font-semibold">LTP</th>
-                                <th class="px-4 py-2 text-center font-semibold">% Chg</th>
-                                <th class="px-4 py-2 text-center font-semibold">H/L %</th>
-                                <th class="px-4 py-2 text-right font-semibold">Action</th>
+                                <th class="px-3 py-2 font-semibold tracking-wider">Symbol</th>
+                                <th class="px-3 py-2 text-right font-semibold tracking-wider">LTP</th>
+                                <th class="px-3 py-2 text-center font-semibold tracking-wider">% Chg</th>
+                                <th class="px-3 py-2 text-right font-semibold tracking-wider hidden sm:table-cell">% > Low</th>
+                                <th class="px-3 py-2 text-right font-semibold tracking-wider hidden sm:table-cell">Vol (L)</th>
+                                <th class="px-3 py-2 text-right font-semibold tracking-wider hidden sm:table-cell">T/O (Cr)</th>
+                                <th class="px-3 py-2 text-right font-semibold tracking-wider">Exec</th>
                             </tr>
                         </thead>
-                        <tbody id="losers-body">
-                            <tr><td colspan="5" class="p-8 text-center text-gray-500 text-xs">Waiting for Tick Data...</td></tr>
-                        </tbody>
+                        <tbody id="losers-body"></tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        <!-- 4. OPEN POSITIONS -->
-        <div class="glass-panel rounded-2xl overflow-hidden border border-gray-700">
+        <div class="glass-panel rounded-2xl overflow-hidden">
             <div class="p-5 border-b border-gray-700/50 bg-black/20 flex justify-between items-center">
-                <h2 class="text-lg font-bold text-white">Open Positions</h2>
-                <span class="bg-indigo-500/20 text-indigo-300 text-xs font-bold px-3 py-1 rounded-full border border-indigo-500/30">{{ open_positions|length }} Active</span>
+                <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                    <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                    Open Positions
+                </h2>
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
+                    <span class="text-xs text-indigo-300 font-bold font-mono">{{ open_positions|length }} Active</span>
+                </div>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-sm text-left text-gray-300">
-                    <thead class="text-xs text-gray-500 uppercase bg-gray-900/50">
+                    <thead class="text-[10px] text-gray-500 uppercase bg-gray-900/40">
                         <tr>
-                            <th class="px-6 py-4 font-semibold">Symbol</th>
-                            <th class="px-6 py-4 font-semibold">Type / Qty</th>
-                            <th class="px-6 py-4 font-semibold">Entry</th>
-                            <th class="px-6 py-4 font-semibold">LTP</th>
-                            <th class="px-6 py-4 font-semibold">P&L</th>
+                            <th class="px-6 py-4 font-semibold tracking-wider">Symbol</th>
+                            <th class="px-6 py-4 font-semibold tracking-wider">Side / Qty</th>
+                            <th class="px-6 py-4 font-semibold tracking-wider text-right">Entry</th>
+                            <th class="px-6 py-4 font-semibold tracking-wider text-right">LTP</th>
+                            <th class="px-6 py-4 font-semibold tracking-wider text-right">P&L</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-gray-700/50" id="positions-body">
-                        {% for pos in open_positions %}
-                        <tr class="hover:bg-white/5 transition" id="pos-row-{{ pos.symbol.instrument_token }}">
+                    <tbody class="divide-y divide-gray-800" id="positions-body">
+                         {% for pos in open_positions %}
+                        <tr class="hover:bg-white/5 transition duration-200" id="pos-row-{{ pos.symbol.instrument_token }}">
                             <td class="px-6 py-4 font-medium text-white">{{ pos.symbol.symbol }}</td>
-                            <td class="px-6 py-4 font-bold {{ pos.trade_type|yesno:'text-green-400,text-red-400' }}">
-                                {{ pos.trade_type }} / {{ pos.quantity }}
+                            <td class="px-6 py-4 font-bold font-mono text-xs">
+                                <span class="px-2 py-1 rounded border {{ pos.trade_type|yesno:'bg-green-500/10 border-green-500/20 text-green-400,bg-red-500/10 border-red-500/20 text-red-400' }}">
+                                    {{ pos.trade_type }}
+                                </span>
+                                <span class="ml-2 text-gray-300">{{ pos.quantity }}</span>
                             </td>
-                            <td class="px-6 py-4 text-gray-400">{{ pos.entry_price }}</td>
-                            <td class="px-6 py-4 text-gray-200 font-mono ltp-val" id="ltp-{{ pos.symbol.instrument_token }}">--</td>
-                            <td class="px-6 py-4 font-bold font-mono pnl-val" id="pnl-{{ pos.symbol.instrument_token }}">--</td>
+                            <td class="px-6 py-4 text-gray-400 font-mono text-right">{{ pos.entry_price }}</td>
+                            <td class="px-6 py-4 text-gray-200 font-mono font-bold text-right ltp-val" id="ltp-{{ pos.symbol.instrument_token }}">--</td>
+                            <td class="px-6 py-4 font-bold font-mono text-right pnl-val" id="pnl-{{ pos.symbol.instrument_token }}">--</td>
                         </tr>
                         {% empty %}
-                        <tr><td colspan="5" class="px-6 py-8 text-center text-gray-500 text-xs italic">No open positions.</td></tr>
+                        <tr><td colspan="5" class="px-6 py-12 text-center text-gray-600 text-sm font-medium">No open positions currently active.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -193,94 +259,103 @@
         </div>
     </div>
 
-    <!-- STRATEGY MODAL (Kept same logic) -->
-    <div id="strategyModal" class="fixed inset-0 bg-black/90 backdrop-blur-md hidden flex items-center justify-center z-50 transition-opacity">
-        <div class="glass-panel rounded-2xl shadow-2xl w-full max-w-sm mx-4 transform transition-all scale-100 border border-gray-700">
-            <div class="p-6 border-b border-gray-700/50">
-                <h2 class="text-lg font-bold text-white flex items-center justify-between">
-                    <span>Configure Strategy</span>
-                    <span id="stgAction" class="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">BUY</span>
-                </h2>
-                <p class="text-xs text-indigo-400 mt-1 font-bold tracking-wide" id="stgSymbol">RELIANCE</p>
+    <div id="strategyModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center z-50 transition-opacity duration-300">
+        <div class="glass-panel rounded-2xl shadow-2xl w-full max-w-sm mx-4 transform transition-all scale-100 border border-gray-700 overflow-hidden ring-1 ring-white/10">
+            <div class="p-6 border-b border-gray-700/50 bg-gradient-to-r from-gray-900 to-gray-800">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h2 class="text-xl font-bold text-white tracking-tight">Strategy Setup</h2>
+                        <p class="text-sm text-indigo-400 font-mono mt-1" id="stgSymbol">RELIANCE</p>
+                    </div>
+                    <span id="stgAction" class="px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider border shadow-lg">BUY</span>
+                </div>
             </div>
-            <div class="p-6 space-y-5">
+            <div class="p-6 space-y-5 bg-[#111318]">
                 <div>
-                    <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider">Capital per Trade (₹)</label>
-                    <input type="number" id="inputCapital" value="10000" step="1000" class="w-full bg-[#161b22] border border-gray-700 text-white p-3 rounded-xl focus:border-indigo-500 outline-none font-mono text-sm transition">
+                    <label class="block text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-wider">Capital Allocation (₹)</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-mono">₹</span>
+                        <input type="number" id="inputCapital" value="10000" step="1000" class="w-full bg-gray-900 border border-gray-700 text-white p-3 pl-8 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-mono text-sm transition">
+                    </div>
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider">Trailing SL (%)</label>
-                        <input type="number" id="inputTSL" value="1.0" step="0.1" class="w-full bg-[#161b22] border border-gray-700 text-white p-3 rounded-xl focus:border-indigo-500 outline-none font-mono text-sm transition">
+                        <label class="block text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-wider">Trailing SL (%)</label>
+                        <input type="number" id="inputTSL" value="1.0" step="0.1" class="w-full bg-gray-900 border border-gray-700 text-white p-3 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-mono text-sm transition text-center">
                     </div>
                     <div>
-                        <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider">Pyramid Add (%)</label>
-                        <input type="number" id="inputIncrease" value="1.0" step="0.1" class="w-full bg-[#161b22] border border-gray-700 text-white p-3 rounded-xl focus:border-indigo-500 outline-none font-mono text-sm transition">
+                        <label class="block text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-wider">Pyramid Add (%)</label>
+                        <input type="number" id="inputIncrease" value="1.0" step="0.1" class="w-full bg-gray-900 border border-gray-700 text-white p-3 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-mono text-sm transition text-center">
                     </div>
                 </div>
             </div>
-            <div class="p-4 bg-black/20 text-right flex justify-end space-x-3 rounded-b-2xl">
-                <button onclick="closeStrategyModal()" class="px-4 py-2 text-gray-400 hover:text-white text-xs font-bold transition">Cancel</button>
-                <button onclick="confirmStrategyStart()" class="px-6 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 text-white rounded-lg font-bold shadow-lg shadow-indigo-900/30 text-xs tracking-wide transition transform hover:scale-105">Start Algorithm</button>
+            <div class="p-4 bg-gray-900 border-t border-gray-800 flex justify-end space-x-3">
+                <button onclick="closeStrategyModal()" class="px-4 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg text-xs font-bold transition">Cancel</button>
+                <button onclick="confirmStrategyStart()" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold shadow-lg shadow-indigo-900/30 text-xs tracking-wide transition transform hover:scale-105">Deploy Strategy</button>
             </div>
         </div>
     </div>
 
-
-    <!-- JS LOGIC -->
     <script>
-        // GLOBALS
         let selectedToken = null;
         let selectedAction = null;
 
-        // --- RENDER TABLE (UPDATED COLORS AND SIZES) ---
         function renderTable(id, items, action) {
             const tbody = document.getElementById(id);
             if(!tbody) return;
-            if(items.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-gray-500 text-xs italic">Waiting for data...</td></tr>`; return; }
+            
+            const minVolInput = document.getElementById('minVolumeFilter').value;
+            const minVol = minVolInput ? parseFloat(minVolInput) : 0;
+            
+            const filteredItems = items.filter(s => (s.volume || 0) >= minVol);
+
+            if(filteredItems.length === 0) { 
+                tbody.innerHTML = `<tr><td colspan="7" class="p-12 text-center text-gray-600 text-xs italic">Waiting for market ticks or filtered out...</td></tr>`; 
+                return; 
+            }
             
             let html = '';
-            items.forEach(stock => {
-                let rowBgClass = 'bg-[#161b22]/40 hover:bg-[#161b22]/80';
-                let textClass = 'text-gray-300'; 
+            filteredItems.forEach(stock => {
+                let textClass = 'text-gray-300';
+                let bgClass = 'hover:bg-gray-800/50';
 
-                // 1. Color Logic (Price Action) - EQUITY
                 if(stock.color === 'DARKGREEN') {
-                    rowBgClass = 'bg-green-900/20 hover:bg-green-900/30 border-l-4 border-green-500';
-                    textClass = 'text-green-300 font-bold';
-                } else if(stock.color === 'BROWN') {
-                    textClass = 'text-amber-500 font-bold'; 
+                    textClass = 'text-emerald-400 font-bold';
+                    bgClass = 'bg-emerald-900/10 hover:bg-emerald-900/20';
                 } else if(stock.color === 'RED') {
-                    textClass = 'text-red-500 font-bold';
+                    textClass = 'text-red-400 font-bold';
+                    bgClass = 'bg-red-900/10 hover:bg-red-900/20';
                 }
                 
-                // 2. F&O Logic (Dark Blue Background + Blue Badge)
                 let fnoBadge = '';
                 if (stock.is_fno || stock.border === 'BLUE') {
-                    // OVERRIDE background for F&O to Dark Blue
-                    rowBgClass = 'bg-blue-900/20 hover:bg-blue-900/30 border-l-4 border-blue-500'; 
-                    textClass = 'text-blue-200 font-bold'; // Blue-ish text
-                    fnoBadge = '<span class="ml-2 text-[9px] bg-blue-600/30 text-blue-200 border border-blue-500/50 px-1.5 py-0.5 rounded font-bold tracking-wide">FnO</span>';
+                    fnoBadge = `<span class="mr-2 text-[9px] bg-blue-600/60 text-blue-300 border border-blue-500/80 px-2 py-0.5 rounded font-bold tracking-wide font-mono shadow-md shadow-blue-900/60">FnO</span>`;
                 }
 
+                let volLacs = (stock.volume / 100000).toFixed(2);
+                let toCr = (stock.turnover / 10000000).toFixed(2);
+                let pctClass = stock.pct_change > 0 ? 'text-emerald-400' : 'text-red-400';
+                let pctFromLow = stock.pct_from_low !== undefined ? stock.pct_from_low.toFixed(2) : '0.00';
+
                 html += `
-                <tr class="transition duration-150 group rounded-xl mb-1 ${rowBgClass}">
-                    <td class="px-4 py-3 font-medium flex items-center ${textClass}">
-                        ${stock.symbol} ${fnoBadge}
+                <tr class="transition duration-150 group border-b border-gray-800/50 last:border-0 ${bgClass}">
+                    <td class="px-3 py-3 font-medium flex items-center ${textClass}">
+                        ${fnoBadge}${stock.symbol}
                     </td>
-                    <td class="px-4 py-3 font-mono text-gray-300 text-right">₹ ${stock.ltp.toFixed(2)}</td>
-                    <td class="px-4 py-3 font-bold text-center ${stock.pct_change > 0 ? 'text-green-400' : 'text-red-400'}">
+                    <td class="px-3 py-3 font-mono text-gray-200 text-right">₹${stock.ltp.toFixed(2)}</td>
+                    <td class="px-3 py-3 font-bold font-mono text-center ${pctClass}">
                         ${stock.pct_change > 0 ? '+' : ''}${stock.pct_change.toFixed(2)}%
                     </td>
-                    <!-- INCREASED SIZE FOR H/L % -->
-                    <td class="px-4 py-3 text-center font-mono">
-                        <div class="text-sm font-semibold text-gray-400">H: <span class="${stock.pct_from_high > -1 ? 'text-green-400' : 'text-red-400'}">${stock.pct_from_high.toFixed(2)}%</span></div>
-                        <div class="text-sm font-semibold text-gray-400">L: <span class="${stock.pct_from_low > 1 ? 'text-green-400' : 'text-red-400'}">+${stock.pct_from_low.toFixed(2)}%</span></div>
+                    <td class="px-3 py-3 font-mono text-right text-xs hidden sm:table-cell">
+                        <span class="text-emerald-400">▲ ${pctFromLow}%</span>
                     </td>
-                    <td class="px-4 py-3 text-right">
+                    <td class="px-3 py-3 font-mono text-gray-400 text-right text-xs hidden sm:table-cell">${volLacs}L</td>
+                    <td class="px-3 py-3 font-mono text-gray-400 text-right text-xs hidden sm:table-cell">${toCr}Cr</td>
+                    <td class="px-3 py-3 text-right">
                         <button onclick="triggerLadder('${stock.token}', '${stock.symbol}', '${action}')" 
-                                class="${action === 'BUY' ? 'bg-green-600/80 hover:bg-green-500' : 'bg-red-600/80 hover:bg-red-500'} 
-                                       text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-lg transition transform active:scale-95 tracking-wide">
+                                class="opacity-0 group-hover:opacity-100 transition-all duration-200 
+                                       ${action === 'BUY' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-red-600 hover:bg-red-500'} 
+                                       text-white px-3 py-1 rounded text-[10px] font-bold shadow-lg tracking-wide transform hover:scale-105">
                             ${action}
                         </button>
                     </td>
@@ -289,23 +364,58 @@
             tbody.innerHTML = html;
         }
 
-        // --- REST OF THE JS LOGIC ---
+        // NEW: RENDER CHARTINK ALERTS
+        function renderAlerts(alerts) {
+            const container = document.getElementById('alerts-container');
+            if(!container) return;
+            if(!alerts || alerts.length === 0) {
+                container.innerHTML = `<div class="w-full py-4 text-center text-gray-600 text-xs italic">Waiting for signals...</div>`;
+                return;
+            }
+
+            container.innerHTML = alerts.map(alert => `
+                <div class="min-w-[280px] bg-gray-900/80 border border-gray-700/50 rounded-xl p-3 flex flex-col gap-2 hover:border-indigo-500/30 transition duration-300 shadow-xl">
+                    <div class="flex justify-between items-center">
+                        <span class="text-[9px] font-bold text-indigo-400 uppercase tracking-widest">${alert.scan_name}</span>
+                        <span class="text-[9px] text-gray-500 font-mono">${alert.timestamp}</span>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5 mt-1">
+                        ${alert.stocks.split(',').map(stock => `
+                            <span class="px-2 py-0.5 bg-gray-800 text-white rounded text-[10px] font-bold border border-gray-700">
+                                ${stock.trim()}
+                            </span>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
         function triggerLadder(token, symbol, action) {
             selectedToken = token;
             selectedAction = action;
             document.getElementById('stgSymbol').innerText = symbol;
             const badge = document.getElementById('stgAction');
             badge.innerText = action;
-            badge.className = `px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider text-white ${action === 'BUY' ? 'bg-green-600' : 'bg-red-600'}`;
+            if(action === 'BUY') {
+                badge.className = "px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider border shadow-lg bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
+            } else {
+                badge.className = "px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider border shadow-lg bg-red-500/20 text-red-400 border-red-500/30";
+            }
             document.getElementById('strategyModal').classList.remove('hidden');
         }
-        function closeStrategyModal() { document.getElementById('strategyModal').classList.add('hidden'); }
+
+        function closeStrategyModal() { 
+            document.getElementById('strategyModal').classList.add('hidden'); 
+        }
 
         async function confirmStrategyStart() {
             const capital = document.getElementById('inputCapital').value;
             const tsl = document.getElementById('inputTSL').value;
             const increase = document.getElementById('inputIncrease').value;
-            if(!capital || capital < 500) { alert("Invalid Capital (Min 500)"); return; }
+            if(!capital || capital < 500) { 
+                alert("Invalid Capital (Min 500)"); 
+                return; 
+            }
             closeStrategyModal();
             try {
                 const res = await fetch(window.location.origin + '/api/trigger-ladder/', {
@@ -314,9 +424,15 @@
                     headers: { 'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json' }
                 });
                 const data = await res.json();
-                if(data.status === 'success') { alert("✅ Started: " + data.message); refreshDashboard(); } 
-                else { alert("❌ Error: " + data.message); }
-            } catch(e) { console.error(e); }
+                if(data.status === 'success') { 
+                    alert("🚀 Strategy Deployed: " + data.message); 
+                    refreshDashboard(); 
+                } else { 
+                    alert("⚠️ Error: " + data.message); 
+                }
+            } catch(e) { 
+                console.error(e); 
+            }
         }
 
         async function refreshDashboard() {
@@ -324,75 +440,68 @@
                 const res = await fetch(window.location.origin + '/api/dashboard-data/');
                 if(!res.ok) return;
                 const data = await res.json();
+                
                 if(data.status === 'success') {
+                    const now = new Date();
+                    document.getElementById('last-updated-time').innerText = now.toLocaleTimeString();
+
                     document.getElementById('realized_pnl').innerText = `₹ ${data.realized_pnl}`;
                     const upnl = document.getElementById('unrealized_pnl');
                     upnl.innerText = `₹ ${data.unrealized_pnl}`;
-                    upnl.className = `text-4xl font-bold mt-2 tracking-tight ${data.unrealized_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`;
+                    
+                    if(data.unrealized_pnl > 0) upnl.className = "text-4xl md:text-5xl font-bold font-mono tracking-tighter text-emerald-400 glow-text-green";
+                    else if(data.unrealized_pnl < 0) upnl.className = "text-4xl md:text-5xl font-bold font-mono tracking-tighter text-red-400 glow-text-red";
+                    else upnl.className = "text-4xl md:text-5xl font-bold font-mono tracking-tighter text-white";
+                    
                     renderTable('gainers-body', data.gainers, 'BUY');
                     renderTable('losers-body', data.losers, 'SELL');
+                    
+                    // NEW: Inject alerts data
+                    if(data.alerts) renderAlerts(data.alerts);
+                    
                     data.positions.forEach(pos => {
                         const ltpEl = document.getElementById(`ltp-${pos.id}`);
                         const pnlEl = document.getElementById(`pnl-${pos.id}`);
                         if(ltpEl) {
-                            let oldVal = parseFloat(ltpEl.innerText);
+                            let oldVal = parseFloat(ltpEl.innerText) || 0;
                             if(pos.ltp > oldVal) ltpEl.parentElement.classList.add('flash-up');
                             else if(pos.ltp < oldVal) ltpEl.parentElement.classList.add('flash-down');
-                            setTimeout(() => ltpEl.parentElement.classList.remove('flash-up', 'flash-down'), 1000);
+                            setTimeout(() => ltpEl.parentElement.classList.remove('flash-up', 'flash-down'), 800);
                             ltpEl.innerText = pos.ltp;
                         }
                         if(pnlEl) {
                             pnlEl.innerText = pos.pnl;
-                            pnlEl.className = `px-6 py-4 font-bold font-mono ${pos.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`;
+                            pnlEl.className = `px-6 py-4 font-bold font-mono text-right ${pos.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
                         }
                     });
                 }
-            } catch(e) { console.log("Polling...", e); }
+            } catch(e) { 
+                console.log("Polling...", e); 
+            }
         }
-        setInterval(refreshDashboard, 2000);
-        refreshDashboard();
-
-        // Utils
-        const modal = document.getElementById('addSymbolModal');
-        const searchInput = document.getElementById('searchInput');
-        const searchResults = document.getElementById('searchResults');
-        let debounceTimer;
-        function openModal() { modal.classList.remove('hidden'); searchInput.focus(); }
-        function closeModal() { modal.classList.add('hidden'); searchInput.value=''; searchResults.classList.add('hidden'); }
-        searchInput.addEventListener('input', (e) => {
-            clearTimeout(debounceTimer);
-            if(e.target.value.length < 2) { searchResults.classList.add('hidden'); return; }
-            debounceTimer = setTimeout(async () => {
-                const res = await fetch(window.location.origin + `/api/search-instruments/?q=${e.target.value}`);
-                const data = await res.json();
-                searchResults.innerHTML = '';
-                searchResults.classList.remove('hidden');
-                data.forEach(item => {
-                    const div = document.createElement('div');
-                    div.className = 'p-3 hover:bg-gray-700/50 cursor-pointer border-b border-gray-800 flex justify-between items-center transition rounded-lg mx-1';
-                    div.innerHTML = `<span class="font-bold text-gray-300 text-sm">${item.value.symbol}</span><button class="text-[10px] bg-indigo-600 px-2 py-1 rounded text-white font-bold">ADD</button>`;
-                    div.onclick = async () => {
-                        await fetch(window.location.origin + '/api/add-symbol/', { method: 'POST', body: JSON.stringify({instrument: item.value}), headers: { 'X-CSRFToken': '{{ csrf_token }}' } });
-                        closeModal();
-                    };
-                    searchResults.appendChild(div);
-                });
-            }, 300);
-        });
+        
         async function toggleKillSwitch() {
              const checkbox = document.getElementById('killSwitch');
              const label = document.getElementById('statusLabel');
-             const rail = document.getElementById('toggleRail');
-             const knob = document.getElementById('toggleKnob');
              if (checkbox.checked) {
-                rail.classList.remove('bg-red-900'); rail.classList.add('bg-green-600');
-                knob.style.transform = 'translateX(100%)'; label.innerHTML = '<span class="text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.5)]">Live Trading ON</span>';
+                label.innerHTML = `
+                    <span class="text-[10px] uppercase font-bold text-emerald-500 tracking-wider glow-text-green">System Active</span>
+                    <span class="text-[9px] text-gray-400 font-mono">Live Execution ON</span>`;
             } else {
-                rail.classList.remove('bg-green-600'); rail.classList.add('bg-red-900');
-                knob.style.transform = 'translateX(0)'; label.innerHTML = '<span class="text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]">System Halted</span>';
+                label.innerHTML = `
+                    <span class="text-[10px] uppercase font-bold text-red-500 tracking-wider glow-text-red">System Halted</span>
+                    <span class="text-[9px] text-gray-400 font-mono">Execution STOPPED</span>`;
             }
-             try { await fetch(window.location.origin + '/api/toggle-kill-switch/', { method: 'POST', headers: { 'X-CSRFToken': '{{ csrf_token }}' } }); } catch(e){}
+             try { 
+                await fetch(window.location.origin + '/api/toggle-kill-switch/', { 
+                    method: 'POST', 
+                    headers: { 'X-CSRFToken': '{{ csrf_token }}' } 
+                }); 
+             } catch(e){}
         }
+
+        setInterval(refreshDashboard, 5000);
+        refreshDashboard();
     </script>
 </body>
 </html>

@@ -146,8 +146,8 @@ python manage.py run_ticker
 
 📂 Project Structure
 
-algo_multi_client/
-├── algosystem/                  # Settings, URLs, Celery Config
+ Algosystem/
+├── Algosystem/                  # Settings, URLs, Celery Config
 │   ├── settings.py
 │   ├── celery.py                # Celery App Definition
 │   └── __init__.py              # App Loading

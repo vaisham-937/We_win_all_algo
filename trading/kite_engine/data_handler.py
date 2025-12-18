@@ -18,7 +18,7 @@ class MarketDataHandler:
         self.kws = KiteTicker(api_key, access_token)
         
         # Internal Maps
-        self.tokens_map = {} # { 123456: {'symbol': 'RELIANCE', 'is_fno': True, ...} }
+        self.tokens_map = {} 
         self.fno_set = set(settings.FNO_LIST)
         self.monitored_set = set(settings.MONITORED_SYMBOLS)
 
@@ -27,19 +27,14 @@ class MarketDataHandler:
 
     def initialize_symbols_from_kite(self):
         """
-        Fetches Instrument Master List from Kite (NO DATABASE USED).
-        Filters based on settings.MONITORED_SYMBOLS.
+        Fetches Instrument Master List from Kite.
         """
         logger.info("⬇️ Downloading Master Instrument List from Kite...")
         try:
-            # Use temporary KiteConnect instance to fetch instruments
             kite = KiteConnect(api_key=self.api_key)
             kite.set_access_token(self.access_token)
             
-            # Fetch NSE Equity & NFO (if you trade F&O)
-            # Fetching complete list to match all segments
             instruments = kite.instruments() 
-            
             mapped_count = 0
             
             # Clear previous active list in Redis
@@ -49,11 +44,9 @@ class MarketDataHandler:
                 tradingsymbol = instr['tradingsymbol']
                 
                 # Check if this symbol is in our Monitored List
-                # We prioritize NSE over BSE if duplicates exist, or you can add logic
                 if tradingsymbol in self.monitored_set and instr['exchange'] == 'NSE':
                     token = int(instr['instrument_token'])
                     
-                    # Store Metadata in Memory
                     self.tokens_map[token] = {
                         'symbol': tradingsymbol,
                         'token': token,
@@ -63,7 +56,7 @@ class MarketDataHandler:
                         'is_fno': tradingsymbol in self.fno_set
                     }
                     
-                    # Store Token in Redis Set (For Dashboard to know what to fetch)
+                    # Store Token in Redis Set
                     redis_client.sadd("active_tokens", token)
                     mapped_count += 1
             
@@ -77,17 +70,12 @@ class MarketDataHandler:
             logger.error("❌ No symbols mapped! Check settings.MONITORED_SYMBOLS")
             return
 
-        # Assign Callbacks
         self.kws.on_ticks = self.on_ticks
         self.kws.on_connect = self.on_connect
         self.kws.on_close = self.on_close
         self.kws.on_error = self.on_error
         
-        # Start Infinite Loop with Threading for non-blocking if needed, 
-        # but usually main thread is fine for a management command.
         self.kws.connect(threaded=True)
-        
-        # Keep main thread alive to listen
         while True:
             pass
 
@@ -96,9 +84,8 @@ class MarketDataHandler:
         tokens = list(self.tokens_map.keys())
         if tokens:
             ws.subscribe(tokens)
-            # CRITICAL: Set Mode to FULL to get OHLC and Depth (Circuit Limits)
             ws.set_mode(ws.MODE_FULL, tokens)
-            logger.info(f"📡 Subscribed to {len(tokens)} tokens")
+            logger.info(f"📡 Subscribed to {len(tokens)} tokens in MODE_FULL")
 
     def on_close(self, ws, code, reason):
         logger.error(f"🔴 Connection Closed: {code} - {reason}")
@@ -108,7 +95,7 @@ class MarketDataHandler:
 
     def on_ticks(self, ws, ticks):
         """
-        Process live ticks, calculate metrics, update Redis state, and Publish.
+        Process live ticks, calculate metrics, update Redis state.
         """
         for tick in ticks:
             token = tick['instrument_token']
@@ -118,21 +105,24 @@ class MarketDataHandler:
 
             ltp = tick['last_price']
             
-            # Extract OHLC (Available in MODE_FULL)
+            # Extract OHLC
             ohlc = tick.get('ohlc', {})
             close = ohlc.get('close', ltp)
             high = ohlc.get('high', ltp)
             low = ohlc.get('low', ltp)
             
-            # Extract Circuit Limits (Often in 'depth' or top-level depending on API version)
-            # Kite usually sends 'depth' which contains keys if mode is full.
-            # If not directly available, we might need a fallback or separate API call.
-            # However, for MODE_FULL, 'ohlc' is standard.
-            
-            # Calculations
+            # --- CALCULATIONS ---
+            volume = tick.get('volume_traded', tick.get('volume', 0))
+            avg_price = tick.get('average_price', ltp)
+            turnover = volume * avg_price if avg_price > 0 else volume * ltp
+
             pct_change = ((ltp - close) / close) * 100 if close > 0 else 0
-            pct_from_high = ((ltp - high) / high) * 100 if high > 0 else 0
+            
+            # PERCENTAGE FROM DAY LOW
+            # Logic: How much has it recovered from the bottom?
             pct_from_low = ((ltp - low) / low) * 100 if low > 0 else 0
+            
+            pct_from_high = ((ltp - high) / high) * 100 if high > 0 else 0
             
             # Color Logic
             color = 'WHITE'
@@ -147,23 +137,24 @@ class MarketDataHandler:
                 'symbol': meta['symbol'],
                 'token': token,
                 'ltp': ltp,
+                'volume': volume,
+                'turnover': round(turnover, 2),
                 'pct_change': round(pct_change, 2),
                 'pct_from_high': round(pct_from_high, 2),
-                'pct_from_low': round(pct_from_low, 2),
+                'pct_from_low': round(pct_from_low, 2),  # <--- STORED HERE
                 'color': color,
                 'border': color_border,
                 'is_fno': meta['is_fno'],
-                # Try to get circuit limits if available, else 0
                 'upper_circuit_limit': tick.get('upper_circuit_limit', 0), 
                 'lower_circuit_limit': tick.get('lower_circuit_limit', 0)
             }
             
             json_packet = json.dumps(data_packet)
 
-            # 1. UPDATE STATE (For Dashboard AJAX Polling)
+            # 1. UPDATE STATE IN REDIS
             redis_client.set(f"tick:{token}", json_packet, ex=86400)
             
-            # 2. PUBLISH STREAM (For Pub/Sub Consumers)
+            # 2. PUBLISH STREAM
             redis_client.publish("live_ticks", json_packet)
             
             # 3. STRATEGY HOOK

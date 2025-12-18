@@ -123,3 +123,21 @@ class LadderState(models.Model):
 
     def __str__(self):
         return f"{self.symbol.symbol} - {self.current_mode}"
+    
+
+class ChartinkAlert(models.Model):
+    """Stores alerts received from Chartink via Webhook."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    scan_name = models.CharField(max_length=255)
+    stocks = models.TextField(help_text="Comma-separated list of symbols")
+    trigger_price = models.FloatField(default=0.0)
+    timestamp = models.DateTimeField(default=timezone.now)
+    is_processed = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        return f"{self.scan_name} at {self.timestamp}"
+

@@ -3,7 +3,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.db.models import Sum
-from .models import ClientAccount, TradeLog, TradeSymbol, LadderState
+from .models import ClientAccount, TradeLog, TradeSymbol, LadderState, ChartinkAlert
 from .kite_engine.account_manager import kite_session_manager
 from django.conf import settings
 from datetime import date
@@ -16,6 +16,10 @@ from django.contrib.auth import login, logout, authenticate
 from .forms import SignUpForm
 from django.contrib import messages
 from django_redis import get_redis_connection
+from .kite_engine.strategy_manager import start_buy_ladder, start_sell_ladder
+from django.http import JsonResponse, HttpResponse
+
+
 
 redis_client = get_redis_connection("ticks")
 
@@ -157,21 +161,7 @@ def add_symbol(request):
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)})
 
-@login_required
-@require_http_methods(["POST"])
-def remove_symbol(request):
-    """Deletes a symbol from the watchlist."""
-    try:
-        data = json.loads(request.body)
-        symbol_id = data.get('id')
-        symbol = TradeSymbol.objects.get(id=symbol_id)
-        name = symbol.symbol
-        symbol.delete()
-        return JsonResponse({'status': 'success', 'message': f'Removed {name} from watchlist.'})
-    except TradeSymbol.DoesNotExist:
-        return JsonResponse({'status': 'error', 'message': 'Symbol not found.'})
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'message': str(e)})
+
 
 # --- 4. DASHBOARD & STRATEGY ---
 @login_required
@@ -506,3 +496,85 @@ def get_dashboard_data(request):
         
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)})
+
+
+@csrf_exempt
+def chartink_webhook(request):
+    """
+    Endpoint for Chartink Webhooks.
+    Chartink sends JSON: { "stocks": "RELIANCE,SBIN", "trigger_price": "2500", "scan_name": "Breakout" }
+    """
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            stocks_str = data.get('stocks', '')
+            scan_name = data.get('scan_name', 'Chartink Alert')
+            
+            # Save the alert to the database
+            # Note: Since Webhooks are unauthenticated, we might assign it to a default admin or 
+            # use a specific URL parameter to identify the user (e.g., /webhook/chartink/?user_id=1)
+            user_id = request.GET.get('user_id')
+            alert = ChartinkAlert.objects.create(
+                scan_name=scan_name,
+                stocks=stocks_str,
+                trigger_price=float(data.get('trigger_price', 0) or 0)
+            )
+            return JsonResponse({"status": "success", "alert_id": alert.id})
+        except Exception as e:
+            return JsonResponse({"status": "error", "message": str(e)}, status=400)
+    return HttpResponse("Webhook Active", status=200)
+
+def get_alerts_api(request):
+    """Returns the latest 10 alerts for the dashboard."""
+    alerts = ChartinkAlert.objects.all()[:10]
+    data = []
+    for a in alerts:
+        data.append({
+            "id": a.id,
+            "scan_name": a.scan_name,
+            "stocks": a.stocks.split(','),
+            "time": a.timestamp.strftime("%H:%M:%S"),
+            "price": a.trigger_price
+        })
+    return JsonResponse({"status": "success", "alerts": data})
+
+def execute_alert_trade(request):
+    """
+    Called when user clicks Buy/Sell on an alert stock.
+    Initializes the Ladder logic.
+    """
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        symbol_name = data.get('symbol')
+        side = data.get('side') # 'BUY' or 'SELL'
+        
+        # 1. Get/Create TradeSymbol
+        symbol_obj = TradeSymbol.objects.filter(symbol=symbol_name).first()
+        if not symbol_obj:
+            return JsonResponse({"status": "error", "message": "Symbol not in watchlist"}, status=400)
+            
+        # 2. Get/Create LadderState
+        account = ClientAccount.objects.get(user=request.user)
+        ladder, _ = LadderState.objects.get_or_create(client=account, symbol=symbol_obj)
+        
+        # 3. Prevent multiple ladders on same stock
+        if ladder.is_active:
+            return JsonResponse({"status": "error", "message": "Ladder already active for this stock"}, status=400)
+
+        # 4. Fetch current LTP from Redis (provided by Ticker)
+        import django_redis
+        redis_client = django_redis.get_redis_connection("ticks")
+        tick_data = redis_client.get(f"tick:{symbol_obj.instrument_token}")
+        
+        if not tick_data:
+            return JsonResponse({"status": "error", "message": "No live price data yet"}, status=400)
+        
+        ltp = json.loads(tick_data)['ltp']
+
+        # 5. Start Ladder
+        if side == 'BUY':
+            start_buy_ladder(ladder, ltp)
+        else:
+            start_sell_ladder(ladder, ltp)
+            
+        return JsonResponse({"status": "success", "message": f"{side} Ladder Started for {symbol_name}"})
