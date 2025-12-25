@@ -26,11 +26,11 @@ urlpatterns = [
     
     # API endpoints (for dashboard real-time data)
     path('api/pnl/', views.get_realtime_pnl, name='api_pnl'),
-    path('api/search-instruments/', views.search_instruments, name='search_instruments'),
-    path('api/add-symbol/', views.add_symbol, name='add_symbol'),
     path('api/toggle-kill-switch/', views.toggle_kill_switch, name='toggle_kill_switch'),
 
-    path('api/webhook/chartink/', views.chartink_webhook, name='chartink_webhook'),
+    path('api/webhook/chartink/<int:user_id>/', views.chartink_webhook, name='chartink_webhook'),
+    path('api/trigger-chartink-ladder/', views.trigger_chartink_ladder, name='chartink_trigger_ladder'),  
+
     path('api/get-alerts/', views.get_alerts_api, name='get_alerts_api'),
     path('api/execute-alert-trade/', views.execute_alert_trade, name='execute_alert_trade'),
 

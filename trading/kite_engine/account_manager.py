@@ -73,6 +73,11 @@ class KiteSessionManager:
                 # 3. Create Instance
                 kite = KiteConnect(api_key=api_key)
                 kite.set_access_token(access_token)
+
+                # 4. Validate session (IMPORTANT)
+                profile = kite.profile()
+                logger.info(f"[KITE] ✅ Kite initialized for {profile.get('user_name')}")
+
                 return kite
                 
         except Exception as e:

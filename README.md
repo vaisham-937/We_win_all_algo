@@ -127,7 +127,7 @@ Terminal 4: Celery Beat (Scheduler)
 
 Handles daily tasks like fetching instrument tokens at 9:00 AM.
 
-python -m celery -A algosystem beat -l info
+python -m celery -A Algosystem beat -l info
 
 
 Terminal 5: Strategy Engine (The Brain)

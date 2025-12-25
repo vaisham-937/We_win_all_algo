@@ -28,7 +28,7 @@ SECRET_KEY = 'django-insecure-pri(y4t=-9)%cz@_*08o_w=c8&+c1fb99v^#vb3!%-h^p1)&n+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = 'True'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -126,23 +126,19 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # --- REDIS CONFIGURATION (Cache & Message Broker) ---
-
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://127.0.0.1:6379/1",
+        "LOCATION": "redis://127.0.0.1:6379/1",   # 🔴 DB 1  Sessions, tokens, locks, celery-related cache
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
     },
-    # The 'ticks' cache must be defined for your code to work
     "ticks": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://127.0.0.1:6379/2", # Using DB 2 for ticks
+        "LOCATION": "redis://127.0.0.1:6379/2",    #  🟢 DB 2 Live ticks, price, volume...market data
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-             # IMPORTANT: If you use a prefix, keys('*') breaks. 
-             # But with the fix above (get_many), prefixes won't matter.
         }
     }
 }
@@ -166,21 +162,30 @@ LOGIN_REDIRECT_URL = 'dashboard'
 LOGOUT_REDIRECT_URL = 'login'   
 
 # --- CELERY SETTINGS ---
-CELERY_BROKER_URL = 'redis://localhost:6379/0'  # Redis DB 0 for Broker
+CELERY_BROKER_URL = "redis://127.0.0.1:6379/1"
+CELERY_RESULT_BACKEND = "redis://127.0.0.1:6379/1"
+
+CELERY_TIMEZONE = "Asia/Kolkata"
+CELERY_ENABLE_UTC = False
+
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
-CELERY_TIMEZONE = 'Asia/Kolkata'
-
+CELERY_RESULT_SERIALIZER = 'json'
 # --- CELERY BEAT SCHEDULE ---
 from celery.schedules import crontab
 
 CELERY_BEAT_SCHEDULE = {
+
+        # ✅ Runs once daily
     'fetch-instruments-every-morning': {
-        'task': 'trading.tasks.fetch_instruments_task', # Task name
-        'schedule': crontab(hour=12, minute=9),          # Daily at 9:00 AM
-        # Testing ke liye har minute chalana ho to:
-        # 'schedule': crontab(minute='*'), 
+        'task': 'trading.tasks.cache_nse_cash_instruments',
+        'schedule': crontab(hour=20, minute=00),
     },
+
+#    'run-active-ladders-every-5-seconds': {
+#         'task': 'trading.tasks.run_active_ladders',
+#         'schedule': 5.0,
+#     },
 }
 
 
@@ -409,3 +414,16 @@ LADDER_SETTINGS = {
 }
 
 
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+}

@@ -9,7 +9,6 @@ from django_redis import get_redis_connection
 
 logger = logging.getLogger(__name__)
 
-# Use default cache for locking mechanisms (DB 1)
 redis_lock = get_redis_connection("default")
 
 # --- LUA SCRIPT FOR ATOMIC RACE CONDITION PROTECTION ---
@@ -26,17 +25,18 @@ end
 """
 
 def place_order(client, symbol, transaction_type, qty, tag):
-    """
-    Places an MIS Market Order via Kite Connect with Strict MIS/INTRADAY enforcement.
-    Also Checks Client Account Limits.
-    """
+    """ Places an MIS Market Order via Kite Connect with Strict MIS/INTRADAY enforcement. Also Checks Client Account Limits."""
+    side = "BUY" if transaction_type == "BUY" else "SELL"
+    print("-----------------------------------------")
+    logger.info(f"🚀 [{side} LADDER] Order attempt started | Symbol={symbol.symbol} Qty={qty}")
+
     try:
         # 0. Global Safety Checks (Max Loss / Kill Switch)
-        # Note: In a high-frequency loop, querying DB for 'client' every time is slow.
-        # Ideally, pass the updated 'client' object or cache limits in Redis.
-        # For now, we assume 'client' object passed to this function is relatively fresh.
         if not client.is_live_trading_enabled:
-            logger.warning(f"⚠️ Kill Switch Active. Rejecting Order: {symbol.symbol}")
+            logger.warning(
+                f"❌ [Order Rejected for {side} LADDER ] ⚠️ Kill Switch ACTIVE | "
+                f"User={client.user.username} Symbol={symbol.symbol}")
+            print("-----------------------------------------")
             return None
 
         # 1. Get Kite Instance
@@ -56,20 +56,18 @@ def place_order(client, symbol, transaction_type, qty, tag):
             order_type=kite.ORDER_TYPE_MARKET,
             tag=tag
         )
-        logger.info(f"✅ Order Placed: {transaction_type} {symbol.symbol} Qty: {qty} ID: {order_id}")
+        print("✅ ORDER PLACED:", order_id)
+        logger.info(f"✅ {side} Order Placed: {transaction_type} {symbol.symbol} Qty: {qty} ID: {order_id}")
         
-        # 3. Log Trade to DB (Optional but recommended for audit)
-        # (Simplified: logic usually handled by OrderUpdate webhook)
-        return order_id
-        
+        # 3. Log Trade to DB (Optional but recommended for audit) # (Simplified: logic usually handled by OrderUpdate webhook)
+        return order_id   
     except Exception as e:
-        logger.error(f"❌ Order Placement Failed for {symbol.symbol}: {e}")
+        logger.error(f"❌ {side} Order Placement Failed for {symbol.symbol} : Qty: {qty} : {e}")
         return None
 
+
 def process_ladder_strategy(tick_data):
-    """
-    Main Logic Loop: Called for every tick of monitored symbols.
-    """
+    """ Main Logic Loop: Called for every tick of monitored symbols. """
     token = tick_data['token']
     ltp = tick_data['ltp']
     
@@ -77,10 +75,7 @@ def process_ladder_strategy(tick_data):
     lower_circuit = tick_data.get('lower_circuit_limit')
     
     # Fetch active ladders from DB
-    active_ladders = LadderState.objects.filter(
-        symbol__instrument_token=token, 
-        is_active=True
-    ).select_related('client', 'symbol')
+    active_ladders = LadderState.objects.filter(symbol__instrument_token=token, is_active=True).select_related('client', 'symbol')
 
     if not active_ladders.exists():
         return
@@ -96,10 +91,8 @@ def process_ladder_strategy(tick_data):
         # Try to acquire lock for 2 seconds
         is_acquired = lock_script(keys=[lock_key], args=[2])
         
-        if not is_acquired:
-            # Another worker/process is handling this ladder right now
+        if not is_acquired: # Another worker/process is handling this ladder right now
             continue
-
         try:
             # A. Check Square Off Time
             now = timezone.now().time()
@@ -114,19 +107,20 @@ def process_ladder_strategy(tick_data):
                 manage_buy_ladder(ladder, ltp, upper_circuit)
             elif ladder.current_mode == 'SELL':
                 manage_sell_ladder(ladder, ltp, lower_circuit)
-
         except Exception as e:
             logger.error(f"Error processing ladder {ladder.id}: {e}")
         finally:
-            # We rely on TTL (2s) to release, or we can explicitly delete.
-            # Explicit delete is better for high frequency.
+            # We rely on TTL (2s) to release, or we can explicitly delete. # Explicit delete is better for high frequency.
             redis_lock.delete(lock_key)
+
 
 def manage_buy_ladder(ladder, ltp, upper_circuit=None):
     # 1. Update Highest Price Seen (For TSL)
     if ltp > ladder.extreme_price:
         ladder.extreme_price = ltp
         ladder.save(update_fields=['extreme_price'])
+        logger.info(f"[{ladder.symbol.symbol}][BUY] "
+        f"New HIGH detected → Extreme Price = {ltp}")
 
     # 2. Check Circuit Limit Exit
     if upper_circuit and ltp >= upper_circuit:
@@ -136,9 +130,18 @@ def manage_buy_ladder(ladder, ltp, upper_circuit=None):
 
     # 3. Check TSL Hit
     drop_pct = ((ladder.extreme_price - ltp) / ladder.extreme_price) * 100
+    logger.info(
+    f"[{ladder.symbol.symbol}][BUY] "
+    f"LTP={ltp} | Extreme={ladder.extreme_price} | "
+    f"Drop={drop_pct:.2f}% | TSL={ladder.tsl_pct}%"
+)
     
     if drop_pct >= ladder.tsl_pct:
         logger.info(f"TSL Hit for BUY {ladder.symbol}. Reversing to SELL...")
+        logger.warning(
+        f"[{ladder.symbol.symbol}][BUY] ❌ TSL HIT | "
+        f"Drop={drop_pct:.2f}% → REVERSING TO SELL"
+    )
         
         # DOUBLE EXIT PROTECTION: Check if we actually have open qty before selling
         if ladder.current_qty > 0:
@@ -161,9 +164,17 @@ def manage_buy_ladder(ladder, ltp, upper_circuit=None):
 
     # 4. Check Pyramid Add
     rise_from_last = ((ltp - ladder.last_add_price) / ladder.last_add_price) * 100
+    logger.info(
+    f"[{ladder.symbol.symbol}][BUY] "
+    f"LTP={ltp} | LastAdd={ladder.last_add_price} | "
+    f"Rise={rise_from_last:.2f}% | Threshold={ladder.increase_pct}%"
+)
     
     if rise_from_last >= ladder.increase_pct and ladder.level_count < settings.LADDER_SETTINGS['MAX_PYRAMID_LEVELS']:
-        logger.info(f"Pyramiding BUY {ladder.symbol}")
+        logger.info(
+        f"[{ladder.symbol.symbol}][BUY] 🔼 PYRAMID ADD TRIGGERED | "
+        f"QtyBefore={ladder.current_qty}"
+    )
         add_qty = int(ladder.trade_capital / ltp)
         if add_qty < 1: add_qty = 1
         
@@ -173,12 +184,22 @@ def manage_buy_ladder(ladder, ltp, upper_circuit=None):
             ladder.last_add_price = ltp
             ladder.level_count += 1
             ladder.save()
+        logger.info(
+        f"[{ladder.symbol.symbol}][BUY] ✅ ADD EXECUTED | "
+        f"NewQty={ladder.current_qty} | "
+        f"Level={ladder.level_count}"
+    )
+
+
 
 def manage_sell_ladder(ladder, ltp, lower_circuit=None):
     # 1. Update Lowest Price Seen
     if ltp < ladder.extreme_price or ladder.extreme_price == 0:
         ladder.extreme_price = ltp
         ladder.save(update_fields=['extreme_price'])
+        logger.info(
+        f"\033[91m[{ladder.symbol.symbol}][SELL] "
+        f"New LOW detected → Extreme Price = {ltp}\033[0m")
 
     # 2. Check Circuit Limit Exit
     if lower_circuit and ltp <= lower_circuit:
@@ -188,9 +209,15 @@ def manage_sell_ladder(ladder, ltp, lower_circuit=None):
 
     # 3. Check TSL Hit
     rise_pct = ((ltp - ladder.extreme_price) / ladder.extreme_price) * 100
-    
+    logger.info(
+    f"\033[91m[{ladder.symbol.symbol}][SELL] "
+    f"LTP={ltp} | Extreme={ladder.extreme_price} | "
+    f"Rise={rise_pct:.2f}% | TSL={ladder.tsl_pct}%\033[0m")
+
     if rise_pct >= ladder.tsl_pct:
         logger.info(f"TSL Hit for SELL {ladder.symbol}. Reversing to BUY...")
+        logger.error(f"\033[93m[{ladder.symbol.symbol}][SELL] ❌ TSL HIT | "
+        f"Rise={rise_pct:.2f}% → REVERSING TO BUY\033[0m")
         
         if ladder.current_qty > 0:
             place_order(ladder.client, ladder.symbol, 'BUY', ladder.current_qty, "TSL_EXIT")
@@ -211,9 +238,17 @@ def manage_sell_ladder(ladder, ltp, lower_circuit=None):
 
     # 4. Check Pyramid Add
     fall_from_last = ((ladder.last_add_price - ltp) / ladder.last_add_price) * 100
-    
+    logger.info(
+    f"\033[91m[{ladder.symbol.symbol}][SELL] "
+    f"LTP={ltp} | LastAdd={ladder.last_add_price} | "
+    f"Fall={fall_from_last:.2f}% | Threshold={ladder.increase_pct}%\033[0m")
+
     if fall_from_last >= ladder.increase_pct and ladder.level_count < settings.LADDER_SETTINGS['MAX_PYRAMID_LEVELS']:
         logger.info(f"Pyramiding SELL {ladder.symbol}")
+        logger.warning(
+        f"\033[91m[{ladder.symbol.symbol}][SELL] 🔻 PYRAMID ADD TRIGGERED | "
+        f"QtyBefore={ladder.current_qty}\033[0m"
+    )
         add_qty = int(ladder.trade_capital / ltp)
         if add_qty < 1: add_qty = 1
 
@@ -223,6 +258,10 @@ def manage_sell_ladder(ladder, ltp, lower_circuit=None):
             ladder.last_add_price = ltp
             ladder.level_count += 1
             ladder.save()
+        logger.info(
+    f"\033[91m[{ladder.symbol.symbol}][SELL] ✅ ADD EXECUTED | "
+    f"NewQty={ladder.current_qty} | Level={ladder.level_count}\033[0m")
+
 
 def close_ladder(ladder, ltp, tag):
     """Stops the ladder and squares off everything."""
@@ -237,15 +276,40 @@ def close_ladder(ladder, ltp, tag):
 
 # --- INITIALIZERS (Double Entry Protected via DB Check) ---
 
+def calculate_initial_volume(ladder, ltp):
+    """
+    SAFE quantity calculation for both Chartink & Dashboard ladders
+    """
+
+    # 🟢 Quantity-based entry
+    if ladder.entry_type == 'QUANTITY':
+        qty = ladder.fixed_quantity or 1
+        return max(int(qty), 1)
+
+    # 🟢 Capital-based entry
+    capital = ladder.trade_capital or 0
+
+    if capital <= 0:
+        logger.error(
+            f"❌ Invalid trade_capital for ladder {ladder.id}. Using fallback qty=1"
+        )
+        return 1
+
+    if ltp > 0:
+        qty = int(capital / ltp)
+        return max(qty, 1)
+
+    return 1
+
 def start_buy_ladder(ladder, ltp):
-    # Double Entry Protection: Ensure state is not already active
-    if ladder.is_active:
-        logger.warning(f"Double Entry Blocked: Ladder already active for {ladder.symbol.symbol}")
+    """Initiates the Buy Ladder."""
+    qty = calculate_initial_volume(ladder, ltp)
+    
+    if qty <= 0:
+        logger.error(f"❌ Could not calculate quantity for {ladder.symbol.symbol}")
         return
 
-    qty = int(ladder.trade_capital / ltp)
-    if qty < 1: qty = 1 
-    
+    # 'place_order' is the function you already have in this file
     oid = place_order(ladder.client, ladder.symbol, 'BUY', qty, "LADDER_START")
     if oid:
         ladder.current_mode = 'BUY'
@@ -256,15 +320,18 @@ def start_buy_ladder(ladder, ltp):
         ladder.current_qty = qty
         ladder.level_count = 1
         ladder.save()
+        logger.info(f"🚀 Ladder Started: BUY {qty} shares of {ladder.symbol.symbol}")
+
+
 
 def start_sell_ladder(ladder, ltp):
-    if ladder.is_active:
-        logger.warning(f"Double Entry Blocked: Ladder already active for {ladder.symbol.symbol}")
+    """Initiates the Sell Ladder."""
+    qty = calculate_initial_volume(ladder, ltp)
+    
+    if qty <= 0:
+        logger.error(f"❌ Could not calculate quantity for {ladder.symbol.symbol}")
         return
 
-    qty = int(ladder.trade_capital / ltp)
-    if qty < 1: qty = 1
-    
     oid = place_order(ladder.client, ladder.symbol, 'SELL', qty, "LADDER_START")
     if oid:
         ladder.current_mode = 'SELL'
@@ -275,3 +342,12 @@ def start_sell_ladder(ladder, ltp):
         ladder.current_qty = qty
         ladder.level_count = 1
         ladder.save()
+        logger.info(f"🚀 Ladder Started: SELL {qty} shares of {ladder.symbol.symbol}")
+
+
+def start_chartink_ladder(ladder, ltp, action):
+    from trading.tasks import run_chartink_ladder  # 👈 move import here
+
+    logger.info(f"[CHARTINK LADDER] {action} {ladder.symbol.symbol}")
+    run_chartink_ladder.delay(ladder.id,  action)
+

@@ -3,505 +3,812 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Algo Dashboard</title>
+    <title>AlgoTrade Pro | Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {
             theme: {
                 extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                        mono: ['JetBrains Mono', 'monospace'],
-                    },
-                    colors: {
-                        gray: { 850: '#1a1d24', 900: '#111318', 950: '#0b0c10' }
-                    }
+                    fontFamily: { sans: ['Inter', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
+                    colors: { gray: { 850: '#1a1d24', 900: '#111318', 950: '#0b0c10' } }
                 }
             }
         }
     </script>
     <style>
-        body { background-color: #0b0c10; color: #e5e7eb; }
-        .glass-panel {
-            background: rgba(23, 25, 30, 0.6);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+        body { background-color: #0b0c10; color: #e5e7eb; font-family: 'Inter', sans-serif; overflow-x: hidden; }
+        .glass { background: rgba(23, 25, 30, 0.6); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .positive { color: #10b981; }
+        .negative { color: #ef4444; }
+        .dot-pulse { animation: pulse 2s infinite; box-shadow: 0 0 12px #6366f1; }
+        @keyframes float {
+        0%, 100% { transform: translateY(0) translateX(0); }
+        50% { transform: translateY(-40px) translateX(30px); }
+    }
+    @keyframes float-delay {
+        0%, 100% { transform: translateY(0) translateX(0); }
+        50% { transform: translateY(40px) translateX(-30px); }
+    }
+    @keyframes float-slow {
+        0%, 100% { transform: translateY(0) rotate(0deg); }
+        50% { transform: translateY(-60px) rotate(10deg); }
+    }
+    @keyframes float-reverse {
+        0%, 100% { transform: translateX(0) translateY(0); }
+        50% { transform: translateX(-50px) translateY(30px); }
+    }
+    @keyframes pulse-slow {
+        0%, 100% { opacity: 0.4; }
+        50% { opacity: 0.7; }
+    }
+    @keyframes twinkle {
+        0%, 100% { opacity: 0; }
+        50% { opacity: 1; }
+    }
+
+    .animate-float { animation: float 20s ease-in-out infinite; }
+    .animate-float-delay { animation: float-delay 25s ease-in-out infinite; }
+    .animate-float-slow { animation: float-slow 30s ease-in-out infinite; }
+    .animate-float-reverse { animation: float-reverse 22s ease-in-out infinite; }
+    .animate-pulse-slow { animation: pulse-slow 8s ease-in-out infinite; }
+    .animate-twinkle { animation: twinkle 4s ease-in-out infinite; }
+    
+    /* Radial gradient (Tailwind doesn't have it by default) */
+    .bg-gradient-radial {
+        background: radial-gradient(circle at center, var(--tw-gradient-stops));
+    }
+        @keyframes ping {
+            0%, 100% { transform: scale(1); opacity: 0.7; }
+            50% { transform: scale(1.08); opacity: 0.9; }
         }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 99px; }
-        @keyframes flash-green { 0% { background-color: rgba(16, 185, 129, 0.25); } 100% { background-color: transparent; } }
-        @keyframes flash-red { 0% { background-color: rgba(239, 68, 68, 0.25); } 100% { background-color: transparent; } }
-        .flash-up { animation: flash-green 0.8s ease-out; }
-        .flash-down { animation: flash-red 0.8s ease-out; }
-        .glow-text-green { text-shadow: 0 0 10px rgba(74, 222, 128, 0.4); }
-        .glow-text-red { text-shadow: 0 0 10px rgba(248, 113, 113, 0.4); }
+        .animate-ping { animation: ping 3s cubic-bezier(0, 0, 0.2, 1) infinite; }
+        @keyframes glow {
+            from { text-shadow: 0 0 10px rgba(167, 139, 250, 0.6); }
+            to { text-shadow: 0 0 30px rgba(167, 139, 250, 0.9); }
+        }
+        .animate-glow { animation: glow 3s ease-in-out infinite alternate; }
+        .animate-pulse-slow { animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        .glass-hover:hover { transform: translateY(-4px); box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6); }
     </style>
 </head>
-<body class="min-h-screen relative overflow-x-hidden">
-    
-    <div class="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
-        <div class="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-blue-900/10 rounded-full blur-[150px] animate-pulse" style="animation-duration: 8s;"></div>
-        <div class="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-indigo-900/10 rounded-full blur-[150px] animate-pulse" style="animation-duration: 10s;"></div>
-    </div>
+<body class="min-h-screen relative">
 
-    <div class="max-w-[1600px] mx-auto p-4 md:p-6 space-y-6">
+<!-- Background Effects - Fixed & Safe -->
+<div class="fixed inset-0 -z-50 pointer-events-none overflow-hidden">
+    <div class="absolute top-0 left-0 w-[500px] h-[500px] bg-indigo-500/20 rounded-full blur-[100px] animate-float"></div>
+    <div class="absolute bottom-0 right-0 w-[600px] h-[600px] bg-purple-500/20 rounded-full blur-[110px] animate-float-delay"></div>
+    <div class="absolute top-20 right-20 w-[400px] h-[400px] bg-pink-500/15 rounded-full blur-[100px] animate-float-slow"></div>
+    <div class="absolute bottom-40 left-10 w-[450px] h-[450px] bg-cyan-500/15 rounded-full blur-[100px] animate-float-reverse"></div>
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] 
+                bg-gradient-radial from-emerald-500/8 via-transparent to-transparent 
+                rounded-full blur-[120px] animate-pulse-slow"></div>
+</div>
+    <div class="max-w-[1600px] mx-auto p-4 md:p-6 space-y-8">
         
-        <header class="glass-panel rounded-2xl p-4 md:p-6 flex flex-col xl:flex-row justify-between items-center gap-6 relative overflow-hidden">
-            <div class="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent"></div>
-
-            <div class="flex flex-col md:flex-row items-center gap-6 w-full xl:w-auto">
-                <div>
-                    <h1 class="text-2xl md:text-3xl font-bold text-white tracking-tight flex items-center gap-3">
-                        <span class="bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-blue-400">AlgoTrade</span>
-                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-gray-800 text-gray-400 border border-gray-700 font-mono">PRO</span>
+    <!-- Header - Compact & Sleeker -->
+<header class="relative glass rounded-2xl p-4 md:p-5 flex flex-col md:flex-row justify-between items-center gap-6 card-glow glass-hover 
+               backdrop-blur-md bg-gray-900/40 border border-gray-800 z-10">    <!-- Left: Logo + Title -->
+    <div class="flex items-center gap-6 w-full md:w-auto">
+        <div class="relative inline-block flex-shrink-0">
+            <img src="https://thumbs.dreamstime.com/b/vibrant-high-energy-visualization-financial-market-success-neon-green-line-shaped-like-arrow-follows-zigzag-path-upward-420494646.jpg"
+                 alt="AlgoTrade Pro Logo"
+                 class="w-16 h-16 rounded-2xl object-cover">
+            <div class="absolute inset-0 rounded-2xl border-4 border-white/40 animate-ping opacity-70 pointer-events-none"></div>
+        </div>
+                <!-- Title and User Info -->
+                <div class="text-center md:text-left">
+                    <h1 class="text-3xl font-black text-white tracking-tighter">
+                        AlgoTrade <span class="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent animate-glow">PRO</span>
                     </h1>
-                    <div class="flex items-center gap-2 text-sm text-gray-400 mt-1">
-                        <span class="font-medium">{{ user.username }}</span>
-                    </div>
+                    <p class="text-xs text-gray-500 font-mono uppercase tracking-widest">{{ user.username }} | ID: {{ user.id }}</p>
                 </div>
+    </div>
+            <!-- Divider -->
+            <div class="h-10 w-px bg-gradient-to-b from-transparent via-gray-700 to-transparent hidden md:block"></div>
 
-                <div class="h-10 w-[1px] bg-gray-700 hidden md:block"></div>
-
-                <div class="flex items-center bg-gray-900/50 p-2 pr-4 rounded-xl border border-gray-700/50 shadow-inner">
-                    <label for="killSwitch" class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" id="killSwitch" class="sr-only peer" 
-                               {% if account.is_live_trading_enabled %}checked{% endif %} 
-                               onchange="toggleKillSwitch()">
-                        <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 shadow-lg"></div>
-                    </label>
-                    <div class="ml-3 flex flex-col" id="statusLabel">
-                        {% if account.is_live_trading_enabled %}
-                            <span class="text-[10px] uppercase font-bold text-emerald-500 tracking-wider glow-text-green">System Active</span>
-                            <span class="text-[9px] text-gray-400 font-mono">Live Execution ON</span>
-                        {% else %}
-                            <span class="text-[10px] uppercase font-bold text-red-500 tracking-wider glow-text-red">System Halted</span>
-                            <span class="text-[9px] text-gray-400 font-mono">Execution STOPPED</span>
-                        {% endif %}
-                    </div>
-                </div>
+            <!-- Market Status --->
+        <div class="flex items-center gap-6 w-full md:w-auto justify-between md:justify-start">
+            <div class="inline-flex items-center px-3 py-1.5 rounded-full bg-gray-800/70 border border-gray-700">
+                <div id="status-dot" class="w-2 h-2 rounded-full mr-2 shadow-sm bg-red-500"></div> <!-- Closed: red, Open: emerald-500 -->
+                <span id="status-text" class="text-[10px] font-bold uppercase tracking-wide text-red-400">
+            Market Closed
+        </span>
             </div>
 
-            <div class="flex flex-wrap items-center justify-center xl:justify-end gap-3 w-full xl:w-auto">
-                <div class="flex items-center bg-gray-900/50 rounded-lg border border-gray-700/50 px-3 py-2 shadow-sm focus-within:border-indigo-500/50 transition">
-                    <span class="text-gray-500 text-xs font-bold uppercase mr-2 tracking-wider">Min Vol</span>
-                    <input type="number" id="minVolumeFilter" placeholder="0" class="bg-transparent border-none text-white text-sm w-28 focus:ring-0 font-mono text-right placeholder-gray-600">
-                </div>
-                <div class="flex flex-col items-end px-3">
-                    <span class="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Last Sync</span>
-                    <span id="last-updated-time" class="text-indigo-400 font-mono text-sm font-bold">--:--:--</span>
-                </div>
-                 <a href="{% url 'credentials' %}" class="p-2.5 text-gray-400 hover:text-white glass-panel hover:bg-white/5 rounded-lg transition" title="Settings">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                </a>
-                <a href="{% url 'logout' %}" class="p-2.5 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition" title="Logout">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-                </a>
+                <!-- Kill Switch -->
+            <div class="flex items-center bg-black/60 backdrop-blur-xl px-4 py-2 rounded-full border border-gray-800 shadow-xl transition-all hover:shadow-emerald-500/30">
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="killSwitch" class="sr-only peer" {% if account.is_live_trading_enabled %}checked{% endif %} onchange="toggleKillSwitch()">
+                    <!-- Toggle Background -->
+                    <div class="w-10 h-5 bg-gray-700 rounded-full peer 
+                                peer-checked:bg-emerald-600 transition-all duration-300 
+                                shadow-inner peer-checked:shadow-emerald-500/50"></div>
+                    <!-- Toggle Knob -->
+                    <div class="absolute left-0.5 top-0.5 w-4 h-4 bg-gray-400 rounded-full transition-all duration-300 
+                                peer-checked:translate-x-5 peer-checked:bg-white 
+                                shadow-md peer-checked:shadow-white/70"></div>
+                </label>
+                    <div class="ml-3 flex flex-col leading-tight" id="statusLabel">
+                    <span class="text-xs uppercase font-bold tracking-wider 
+                    text-red-400 peer-checked:text-emerald-400 
+                    drop-shadow-md peer-checked:drop-shadow-[0_0_8px_rgba(52,211,153,0.6)]">
+                    {% if account.is_live_trading_enabled %}LIVE{% else %}HALTED{% endif %}
+                    </span>
+                    <span class="text-[8px] text-gray-600 font-mono uppercase">Master</span>
             </div>
-        </header>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="glass-panel rounded-2xl p-6 relative overflow-hidden group hover:border-emerald-500/30 transition duration-500">
-                <div class="absolute right-0 top-0 p-6 opacity-5 group-hover:opacity-10 transition duration-500 transform group-hover:scale-110">
-                    <svg class="w-32 h-32 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"></path></svg>
-                </div>
-                <div class="relative z-10">
-                    <h3 class="text-gray-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
-                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Realized P&L (Today)
-                    </h3>
-                    <div class="mt-3 flex items-baseline gap-1">
-                        <span class="text-4xl md:text-5xl font-bold text-white font-mono tracking-tighter" id="realized_pnl">₹ {{ realized_pnl }}</span>
-                        <span class="text-xs text-gray-500 font-mono uppercase">INR</span>
-                    </div>
-                </div>
-                <div class="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-600/50 to-transparent opacity-50"></div>
             </div>
 
-            <div class="glass-panel rounded-2xl p-6 relative overflow-hidden group hover:border-indigo-500/30 transition duration-500">
-                <div class="absolute right-0 top-0 p-6 opacity-5 group-hover:opacity-10 transition duration-500 transform group-hover:scale-110">
-                    <svg class="w-32 h-32 text-indigo-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd"></path></svg>
-                </div>
-                <div class="relative z-10">
-                    <h3 class="text-gray-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
-                        <span class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span> Unrealized P&L (Open)
-                    </h3>
-                    <div class="mt-3">
-                        <span class="text-4xl md:text-5xl font-bold font-mono tracking-tighter" id="unrealized_pnl">Loading...</span>
+       <!-- Last Sync -->
+                <div class="text-center hidden sm:block">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-900/30 to-purple-900/30 shadow-xl shadow-indigo-500/30 flex items-center justify-center mx-auto mb-1">
+                        <svg class="w-5 h-5 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
                     </div>
+                    <p class="text-[9px] text-gray-500 uppercase tracking-wider">Last Sync</p>
+                    <p id="last-sync-time" class="text-indigo-300 font-mono text-base font-bold drop-shadow">--:--:--</p>
                 </div>
-                <div class="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-600/50 to-transparent opacity-50"></div>
-            </div>
+
+               <!-- Action Icons  -->
+        <div class="flex gap-3">
+            <a href="{% url 'credentials' %}" class="p-3 glass rounded-xl transition-all hover:shadow-xl hover:shadow-indigo-500/60 hover:scale-110" title="Settings">
+                <svg class="w-6 h-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
+                    style="filter: drop-shadow(0 0 10px rgba(129,140,248,0.7));">
+                    <path stroke-linecap="round" stroke-linejoin="round" 
+                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+            </a>
+            <a href="{% url 'logout' %}" class="p-3 glass rounded-xl transition-all hover:shadow-xl hover:shadow-red-500/60 hover:scale-110" title="Logout">
+                <svg class="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
+                    style="filter: drop-shadow(0 0 10px rgba(248,113,113,0.7));">
+                    <path stroke-linecap="round" stroke-linejoin="round" 
+                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+            </a>
         </div>
-
-        <div class="glass-panel rounded-2xl overflow-hidden border-t-2 border-t-indigo-500/20">
-            <div class="p-4 border-b border-gray-700/50 bg-black/20 flex justify-between items-center">
-                <h2 class="text-lg font-bold text-white flex items-center gap-3">
-                    <div class="p-1.5 bg-indigo-500/10 rounded-lg border border-indigo-500/20 text-indigo-400">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
-                    </div>
-                    Chartink Live Alerts
-                </h2>
-                <span class="text-[10px] uppercase font-bold text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded border border-indigo-500/20">Webhook Connected</span>
-            </div>
-            <div class="p-4">
-                <div id="alerts-container" class="flex gap-4 overflow-x-auto pb-2 scrollbar-thin">
-                    <div class="min-w-[300px] p-8 text-center text-gray-600 text-xs italic">
-                        Waiting for signals...
-                    </div>
-                </div>
-            </div>
         </div>
+</header>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-            
-            <div class="glass-panel rounded-2xl flex flex-col border-t-2 border-t-emerald-500/20">
-                <div class="p-4 border-b border-gray-700/50 bg-black/20 flex justify-between items-center backdrop-blur-sm sticky top-0 z-20">
-                    <h2 class="text-lg font-bold text-white flex items-center gap-3">
-                        <div class="p-1.5 bg-emerald-500/10 rounded-lg border border-emerald-500/20 text-emerald-400">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
-                        </div>
-                        Top Gainers
-                    </h2>
-                    <span class="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20">Bullish</span>
+       <!-- Chartink Alerts -->
+        <div class="glass rounded-3xl overflow-hidden card-glow glass-hover border-t-4 border-t-indigo-500/60">
+            <div class="px-8 py-5 bg-gradient-to-r from-indigo-900/20 to-purple-900/10 border-b border-gray-800 flex justify-between items-center">
+                <div class="flex items-center gap-4">
+                    <div class="w-3 h-3 rounded-full bg-indigo-400 dot-pulse"></div>
+                    <h2 class="text-sm font-black text-white uppercase tracking-[0.3em]">Chartink Alerts</h2>
                 </div>
-                <div class="p-4"> 
-                    <table class="w-full text-sm text-left text-gray-300 border-separate border-spacing-y-1">
-                        <thead class="text-[10px] uppercase text-gray-500 sticky top-0 bg-[#111318] z-10 shadow-sm">
-                            <tr>
-                                <th class="px-3 py-2 font-semibold tracking-wider">Symbol</th>
-                                <th class="px-3 py-2 text-right font-semibold tracking-wider">LTP</th>
-                                <th class="px-3 py-2 text-center font-semibold tracking-wider">% Chg</th>
-                                <th class="px-3 py-2 text-right font-semibold tracking-wider hidden sm:table-cell">% > Low</th>
-                                <th class="px-3 py-2 text-right font-semibold tracking-wider hidden sm:table-cell">Vol (L)</th>
-                                <th class="px-3 py-2 text-right font-semibold tracking-wider hidden sm:table-cell">T/O (Cr)</th>
-                                <th class="px-3 py-2 text-right font-semibold tracking-wider">Exec</th>
-                            </tr>
-                        </thead>
-                        <tbody id="gainers-body"></tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div class="glass-panel rounded-2xl flex flex-col border-t-2 border-t-red-500/20">
-                <div class="p-4 border-b border-gray-700/50 bg-black/20 flex justify-between items-center backdrop-blur-sm sticky top-0 z-20">
-                    <h2 class="text-lg font-bold text-white flex items-center gap-3">
-                        <div class="p-1.5 bg-red-500/10 rounded-lg border border-red-500/20 text-red-400">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"></path></svg>
-                        </div>
-                        Top Losers
-                    </h2>
-                    <span class="text-[10px] uppercase font-bold text-red-400 bg-red-500/10 px-2 py-1 rounded border border-red-500/20">Bearish</span>
-                </div>
-                <div class="p-4">
-                    <table class="w-full text-sm text-left text-gray-300 border-separate border-spacing-y-1">
-                        <thead class="text-[10px] uppercase text-gray-500 sticky top-0 bg-[#111318] z-10 shadow-sm">
-                            <tr>
-                                <th class="px-3 py-2 font-semibold tracking-wider">Symbol</th>
-                                <th class="px-3 py-2 text-right font-semibold tracking-wider">LTP</th>
-                                <th class="px-3 py-2 text-center font-semibold tracking-wider">% Chg</th>
-                                <th class="px-3 py-2 text-right font-semibold tracking-wider hidden sm:table-cell">% > Low</th>
-                                <th class="px-3 py-2 text-right font-semibold tracking-wider hidden sm:table-cell">Vol (L)</th>
-                                <th class="px-3 py-2 text-right font-semibold tracking-wider hidden sm:table-cell">T/O (Cr)</th>
-                                <th class="px-3 py-2 text-right font-semibold tracking-wider">Exec</th>
-                            </tr>
-                        </thead>
-                        <tbody id="losers-body"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <div class="glass-panel rounded-2xl overflow-hidden">
-            <div class="p-5 border-b border-gray-700/50 bg-black/20 flex justify-between items-center">
-                <h2 class="text-lg font-bold text-white flex items-center gap-2">
-                    <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
-                    Open Positions
-                </h2>
-                <div class="flex items-center gap-2">
-                    <span class="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
-                    <span class="text-xs text-indigo-300 font-bold font-mono">{{ open_positions|length }} Active</span>
-                </div>
+                <span id="alert-counter" class="text-xs text-indigo-300 font-mono tracking-widest">0 Signals Cached</span>
             </div>
             <div class="overflow-x-auto">
-                <table class="w-full text-sm text-left text-gray-300">
-                    <thead class="text-[10px] text-gray-500 uppercase bg-gray-900/40">
+                <table class="w-full text-sm">
+                    <thead class="text-xs uppercase text-gray-500 tracking-widest border-b border-white/10">
                         <tr>
-                            <th class="px-6 py-4 font-semibold tracking-wider">Symbol</th>
-                            <th class="px-6 py-4 font-semibold tracking-wider">Side / Qty</th>
-                            <th class="px-6 py-4 font-semibold tracking-wider text-right">Entry</th>
-                            <th class="px-6 py-4 font-semibold tracking-wider text-right">LTP</th>
-                            <th class="px-6 py-4 font-semibold tracking-wider text-right">P&L</th>
+                            <th class="px-4 py-4 text-left">Scan</th>
+                            <th class="px-4 py-4 text-left">Symbol</th>
+                            <th class="px-4 py-4 text-left">LTP</th>
+                            <th class="px-4 py-4 text-left">Time</th>
+                            <th class="px-4 py-4 text-left">Action</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-gray-800" id="positions-body">
-                         {% for pos in open_positions %}
-                        <tr class="hover:bg-white/5 transition duration-200" id="pos-row-{{ pos.symbol.instrument_token }}">
-                            <td class="px-6 py-4 font-medium text-white">{{ pos.symbol.symbol }}</td>
-                            <td class="px-6 py-4 font-bold font-mono text-xs">
-                                <span class="px-2 py-1 rounded border {{ pos.trade_type|yesno:'bg-green-500/10 border-green-500/20 text-green-400,bg-red-500/10 border-red-500/20 text-red-400' }}">
-                                    {{ pos.trade_type }}
-                                </span>
-                                <span class="ml-2 text-gray-300">{{ pos.quantity }}</span>
-                            </td>
-                            <td class="px-6 py-4 text-gray-400 font-mono text-right">{{ pos.entry_price }}</td>
-                            <td class="px-6 py-4 text-gray-200 font-mono font-bold text-right ltp-val" id="ltp-{{ pos.symbol.instrument_token }}">--</td>
-                            <td class="px-6 py-4 font-bold font-mono text-right pnl-val" id="pnl-{{ pos.symbol.instrument_token }}">--</td>
+                    <tbody id="alerts-container" class="divide-y divide-gray-800/50"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- P&L Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="glass rounded-3xl p-6 border-l-4 border-l-emerald-500/50">
+                <p class="text-[10px] text-gray-500 font-bold uppercase mb-1 tracking-widest">Realized Today</p>
+                <h2 id="realized-pnl" class="text-3xl font-mono font-bold text-white">₹ 0.00</h2>
+            </div>
+            <div class="glass rounded-3xl p-6 border-l-4 border-l-indigo-500/50">
+                <p class="text-[10px] text-gray-500 font-bold uppercase mb-1 tracking-widest">Unrealized MTM</p>
+                <h2 id="unrealized-pnl" class="text-3xl font-mono font-bold text-white tracking-tighter">₹ 0.00</h2>
+            </div>
+        </div>
+
+        <!-- Market Movers -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Gainers -->
+            <div class="glass rounded-2xl overflow-hidden border border-emerald-500/20 shadow-[0_0_50px_-12px_rgba(16,185,129,0.1)]">
+                <div class="px-4 py-3 bg-emerald-500/10 border-b border-emerald-500/20 flex justify-between items-center">
+                    <h3 class="text-xs font-black uppercase tracking-tighter text-emerald-400">Top Gainers</h3>
+                </div>
+                <table class="w-full text-left border-collapse">
+                    <thead class="text-[9px] uppercase text-gray-500 font-black tracking-widest border-b border-white/5">
+                        <tr>
+                            <th class="px-4 py-3">Symbol</th>
+                            <th class="px-2 py-3 text-right">LTP</th>
+                            <th class="px-2 py-3 text-center">% Chg</th>
+                            <th class="px-2 py-3 text-right">% > Low</th>
+                            <th class="px-2 py-3 text-right">Vol</th>
+                            <th class="px-4 py-3 text-right">Turnover (Cr)</th>
+                            <th class="px-4 py-3 text-right">Action</th>
                         </tr>
-                        {% empty %}
-                        <tr><td colspan="5" class="px-6 py-12 text-center text-gray-600 text-sm font-medium">No open positions currently active.</td></tr>
-                        {% endfor %}
+                    </thead>
+                    <tbody id="gainers-body" class="divide-y divide-white/5"></tbody>
+                </table>
+            </div>
+
+            <!-- Losers -->
+            <div class="glass rounded-2xl overflow-hidden border border-red-500/20 shadow-[0_0_50px_-12px_rgba(239,68,68,0.1)]">
+                <div class="px-4 py-3 bg-red-500/10 border-b border-red-500/20 flex justify-between items-center">
+                    <h3 class="text-xs font-black uppercase tracking-tighter text-red-400">Top Losers</h3>
+                </div>
+                <table class="w-full text-left border-collapse">
+                    <thead class="text-[9px] uppercase text-gray-500 font-black tracking-widest border-b border-white/5">
+                        <tr>
+                            <th class="px-4 py-3">Symbol</th>
+                            <th class="px-2 py-3 text-right">LTP</th>
+                            <th class="px-2 py-3 text-center">% Chg</th>
+                            <th class="px-2 py-3 text-right">% < High</th>
+                            <th class="px-2 py-3 text-right">Vol</th>
+                            <th class="px-4 py-3 text-right">Turnover (Cr)</th>
+                            <th class="px-4 py-3 text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="losers-body" class="divide-y divide-white/5"></tbody>
+                </table>
+            </div>
+        </div>
+            <!-- Toast Notification -->
+        <div id="toast"
+            class="fixed top-6 right-6 hidden z-50 px-6 py-4 rounded-xl
+                    bg-emerald-500/10 text-emerald-400 border border-emerald-500/30
+                    shadow-2xl backdrop-blur-xl text-sm font-bold">
+            🚀 Market is LIVE
+        </div>
+
+        <!-- Market-open-sound -->
+        <audio id="market-open-sound">
+            <source src="https://actions.google.com/sounds/v1/alarms/medium_bell_ring.ogg" type="audio/ogg">
+        </audio>
+
+        <!-- Chartink Alert Sound -->
+        <audio id="chartink-alert-sound">
+            <source src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" type="audio/ogg">
+        </audio>
+
+        <!-- Portfolio Positions -->
+    <div class="glass rounded-3xl overflow-hidden card-glow glass-hover shadow-2xl">            
+        <div class="p-5 border-b border-gray-800 bg-gray-950/40 flex justify-between items-center">
+                <h3 class="text-xs font-bold text-white uppercase tracking-[0.2em]">Open Portfolio</h3>
+                <span id="pos-badge" class="text-[10px] font-mono bg-indigo-500/10 text-indigo-400 px-3 py-1 rounded-full border border-indigo-500/20">0 Active</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-[11px] text-left text-gray-400 border-separate border-spacing-y-1 px-4">
+                    <thead>
+                        <tr class="text-[9px] uppercase text-gray-600 tracking-widest">
+                            <th class="py-3 px-2">Symbol</th>
+                            <th class="py-3 px-2">Side / Qty</th>
+                            <th class="py-3 px-2 text-right">Entry</th>
+                            <th class="py-3 px-2 text-right">LTP</th>
+                            <th class="py-3 px-2 text-right">P&L</th>
+                        </tr>
+                    </thead>
+                    <tbody id="positions-body">
+                        <tr><td colspan="5" class="py-20 text-center text-gray-700 italic font-medium">No open trades.</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
 
-    <div id="strategyModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center z-50 transition-opacity duration-300">
-        <div class="glass-panel rounded-2xl shadow-2xl w-full max-w-sm mx-4 transform transition-all scale-100 border border-gray-700 overflow-hidden ring-1 ring-white/10">
-            <div class="p-6 border-b border-gray-700/50 bg-gradient-to-r from-gray-900 to-gray-800">
-                <div class="flex justify-between items-start">
+    <!-- Strategy Modal -->
+    <div id="tradeModal" class="fixed inset-0 bg-black/95 backdrop-blur-xl hidden flex items-center justify-center z-50 p-4">
+        <div class="glass rounded-[2rem] w-full max-w-sm overflow-hidden shadow-2xl border border-gray-800">
+            <div class="p-8 border-b border-gray-800 bg-gradient-to-b from-gray-800/50 to-transparent">
+                <h2 id="modal-symbol" class="text-3xl font-mono font-bold text-white tracking-tighter">SYMBOL</h2>
+                <div id="modal-badge" class="mt-3 inline-block px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase">BUY LADDER</div>
+            </div>
+            <div class="p-8 space-y-6">
+                <div class="flex bg-gray-900/50 p-1 rounded-2xl border border-gray-800 shadow-inner">
+                    <button id="btnCap" onclick="setEntryType('CAPITAL')" class="flex-1 py-3 text-[10px] font-black rounded-xl transition bg-indigo-600 text-white">CAPITAL</button>
+                    <button id="btnQty" onclick="setEntryType('QUANTITY')" class="flex-1 py-3 text-[10px] font-black rounded-xl transition text-gray-500">QUANTITY</button>
+                </div>
+                <div class="space-y-6">
                     <div>
-                        <h2 class="text-xl font-bold text-white tracking-tight">Strategy Setup</h2>
-                        <p class="text-sm text-indigo-400 font-mono mt-1" id="stgSymbol">RELIANCE</p>
+                        <label id="valueLabel" class="block text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-3">Amount (₹)</label>
+                        <input type="number" id="trade-value" value="10000" class="w-full bg-black border border-gray-800 text-white p-4 rounded-2xl focus:border-indigo-500 outline-none font-mono text-xl shadow-inner">
                     </div>
-                    <span id="stgAction" class="px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider border shadow-lg">BUY</span>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-black/50 p-4 rounded-2xl border border-gray-800 text-center">
+                            <label class="block text-[8px] text-gray-600 font-bold uppercase mb-1">Trail SL %</label>
+                            <input type="number" id="trade-tsl" value="1.0" step="0.1" class="w-full bg-transparent text-white font-mono text-center outline-none text-lg">
+                        </div>
+                        <div class="bg-black/50 p-4 rounded-2xl border border-gray-800 text-center">
+                            <label class="block text-[8px] text-gray-600 font-bold uppercase mb-1">Add %</label>
+                            <input type="number" id="trade-add" value="1.0" step="0.1" class="w-full bg-transparent text-white font-mono text-center outline-none text-lg">
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="p-6 space-y-5 bg-[#111318]">
-                <div>
-                    <label class="block text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-wider">Capital Allocation (₹)</label>
-                    <div class="relative">
-                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-mono">₹</span>
-                        <input type="number" id="inputCapital" value="10000" step="1000" class="w-full bg-gray-900 border border-gray-700 text-white p-3 pl-8 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-mono text-sm transition">
-                    </div>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-wider">Trailing SL (%)</label>
-                        <input type="number" id="inputTSL" value="1.0" step="0.1" class="w-full bg-gray-900 border border-gray-700 text-white p-3 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-mono text-sm transition text-center">
-                    </div>
-                    <div>
-                        <label class="block text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-wider">Pyramid Add (%)</label>
-                        <input type="number" id="inputIncrease" value="1.0" step="0.1" class="w-full bg-gray-900 border border-gray-700 text-white p-3 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-mono text-sm transition text-center">
-                    </div>
-                </div>
-            </div>
-            <div class="p-4 bg-gray-900 border-t border-gray-800 flex justify-end space-x-3">
-                <button onclick="closeStrategyModal()" class="px-4 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg text-xs font-bold transition">Cancel</button>
-                <button onclick="confirmStrategyStart()" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold shadow-lg shadow-indigo-900/30 text-xs tracking-wide transition transform hover:scale-105">Deploy Strategy</button>
+            <div class="p-6 bg-black/40 flex gap-4 border-t border-gray-800">
+                <button onclick="closeModal()" class="flex-1 py-4 text-gray-500 text-[10px] font-bold hover:text-white transition uppercase">Cancel</button>
+                <button onclick="executeTrade()" class="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-lg hover:bg-indigo-500 transition">Confirm</button>
             </div>
         </div>
     </div>
 
     <script>
-        let selectedToken = null;
-        let selectedAction = null;
+    let lastAlertTimestamp = 0;
+    let marketFeed = [];
+    let syncInterval = null;
+    let countdownInterval = null;
+    let marketOpenedToday = false;
+    
+    function nowIST() {
+            return new Date(
+                new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+            );
+        }
+        function pad(n) {
+            return n.toString().padStart(2, '0');
+        }
 
-        function renderTable(id, items, action) {
-            const tbody = document.getElementById(id);
-            if(!tbody) return;
-            
-            const minVolInput = document.getElementById('minVolumeFilter').value;
-            const minVol = minVolInput ? parseFloat(minVolInput) : 0;
-            
-            const filteredItems = items.filter(s => (s.volume || 0) >= minVol);
+    function isMarketOpenIST() {
+        const now = nowIST();
+        const h = now.getHours();
+        const m = now.getMinutes();
+        const s = now.getSeconds();
+        // NSE timings: 9:15 AM – 3:30 PM IST
+        return (
+            (h > 9 || (h === 9 && m >= 15)) &&
+            (h < 15 || (h === 15 && m <= 30))
+        );
+    }
+     function getNextMarketOpenTime() {
+        const now = nowIST();
+        let open = new Date();
 
-            if(filteredItems.length === 0) { 
-                tbody.innerHTML = `<tr><td colspan="7" class="p-12 text-center text-gray-600 text-xs italic">Waiting for market ticks or filtered out...</td></tr>`; 
-                return; 
+        open.setHours(9, 15, 0, 0);
+        // If today is weekend or market already opened → next weekday
+        if (
+            now.getDay() === 0 || // Sunday
+            now.getDay() === 6 || // Saturday
+            now >= open
+        ) {
+            do {
+                open.setDate(open.getDate() + 1);
+            } while (open.getDay() === 0 || open.getDay() === 6);
+        }
+        return open;
+    }
+
+    function showToast() {
+        const toast = document.getElementById('toast');
+        const sound = document.getElementById('market-open-sound');
+
+        toast.classList.remove('hidden');
+        sound.play().catch(()=>{});
+
+        setTimeout(() => toast.classList.add('hidden'), 6000);
+    }
+
+    function startCountdown() {
+    clearInterval(countdownInterval);
+
+    countdownInterval = setInterval(() => {
+        const now = nowIST();
+        const openTime = getNextMarketOpenTime();
+        const diff = openTime - now;
+
+        if (diff <= 0) {
+            clearInterval(countdownInterval);
+            updateMarketState();
+            return;
+        }
+
+        const totalSeconds = Math.floor(diff / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+
+        const text = document.getElementById('status-text');
+        text.innerText = `OPENS IN ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+
+        // Keep countdown style consistent
+        document.getElementById('status-dot').className = 'w-4 h-4 rounded-full bg-yellow-500 shadow-lg shadow-yellow-500/70 animate-ping';
+        document.getElementById('status-glow').className = 'absolute inset-0 rounded-full shadow-2xl shadow-yellow-500/60 opacity-100 animate-pulse-slow';
+        document.getElementById('status-border').className = 'absolute inset-0 rounded-full border-4 border-yellow-500/70 opacity-100';
+        text.className = 'text-lg font-black tracking-widest uppercase text-yellow-300 drop-shadow-lg';
+    }, 1000);
+}
+
+    function updateMarketState() {
+    const dot = document.getElementById('status-dot');
+    const text = document.getElementById('status-text');
+
+    const open = isMarketOpenIST();
+
+    if (open) {
+        // MARKET LIVE - Green/Emerald Style
+        text.innerText = 'MARKET LIVE ';                    // or 'LIVE' if you prefer
+        text.className = 'text-xs font-bold uppercase tracking-wide text-emerald-400';
+
+        dot.className = 'w-2 h-2 rounded-full mr-2 shadow-sm bg-emerald-500 animate-pulse'; // subtle pulse instead of ping for small size
+
+        clearInterval(countdownInterval);
+
+        if (!syncInterval) {
+            sync();
+            syncInterval = setInterval(sync, 5000);
+        }
+
+        if (!marketOpenedToday) {
+            marketOpenedToday = true;
+            showToast();
+        }
+    } else {
+        // MARKET CLOSED or Countdown
+        marketOpenedToday = false;
+
+        if (syncInterval) {
+            clearInterval(syncInterval);
+            syncInterval = null;
+        }
+
+        if (!marketFeed.length) sync();
+
+        const now = nowIST();
+        const nextOpen = getNextMarketOpenTime();
+        const diff = nextOpen - now;
+
+        if (diff > 0 && diff < 24 * 60 * 60 * 1000) {
+            // Opens soon → Countdown active (you can update text dynamically in startCountdown if needed)
+            startCountdown(); // assumes this function updates a separate countdown display
+
+            text.innerText = 'Opens Soon';
+            text.className = 'text-xs font-bold uppercase tracking-wide text-yellow-400';
+
+            dot.className = 'w-2 h-2 rounded-full mr-2 shadow-sm bg-yellow-500 animate-pulse';
+        } else {
+            // Fully closed
+            text.innerText = 'Closed';
+            text.className = 'text-xs font-bold uppercase tracking-wide text-red-400';
+
+            dot.className = 'w-2 h-2 rounded-full mr-2 shadow-sm bg-red-500';
+        }
+    }
+}
+/* ================= DATA FETCH  ================= */
+
+        let sToken = null, sSymbol = null, sAction = 'BUY';
+        let curEntryType = 'CAPITAL';
+
+        async function sync() {
+            try {
+                const [mRes, aRes] = await Promise.all([
+                    fetch('/api/dashboard-data/').then(r => r.json()),
+                    fetch('/api/get-alerts/').then(r => r.json())
+                ]);
+
+                if(mRes.status === 'success') {
+                    document.getElementById('last-sync-time').innerText = new Date().toLocaleTimeString();
+                    document.getElementById('realized-pnl').innerText = `₹ ${parseFloat(mRes.realized_pnl || 0).toFixed(2)}`;
+                    const upnl = document.getElementById('unrealized-pnl');
+                    const val = parseFloat(mRes.unrealized_pnl || 0);
+                    upnl.innerText = `₹ ${val.toFixed(2)}`;
+                    upnl.className = `text-3xl font-mono font-bold tracking-tighter ${val >= 0 ? 'positive' : 'negative'}`;
+
+                    marketFeed = [...(mRes.gainers || []), ...(mRes.losers || [])];
+                    renderMovers('gainers-body', mRes.gainers || [], 'BUY');
+                    renderMovers('losers-body', mRes.losers || [], 'SELL');
+                    renderPositions(mRes.positions || []);
+                }
+
+                if(aRes.status === 'success') renderSignals(aRes.alerts || []);
+            } catch(e) { console.error("Sync Error:", e); }
+        }
+        // Check market status every 30 seconds
+    setInterval(updateMarketState, 30000);
+    // Initial check on page load
+    updateMarketState();
+
+   function renderSignals(alerts) {
+    const container = document.getElementById('alerts-container');
+    document.getElementById('alert-counter').innerText =
+        `${alerts.length} ALERTS CACHED`;
+
+    if (!alerts || alerts.length === 0) {
+        container.innerHTML = `
+            <tr>
+              <td colspan="4" class="py-8 text-center text-gray-600 italic">
+                Awaiting webhook payloads...
+              </td>
+            </tr>`;
+        return;
+    }
+
+    // 🔔 sound only for newest alert
+    const newest = alerts[0];
+    if (newest.timestamp > lastAlertTimestamp) {
+        lastAlertTimestamp = newest.timestamp;
+        const sound = document.getElementById('chartink-alert-sound');
+        sound.currentTime = 0;
+        sound.play().catch(() => {});
+    }
+
+    let rows = [];
+
+    alerts.forEach(alert => {
+        alert.stocks.forEach(symbol => {
+            rows.push(`
+              <tr class="border-b border-white/5 hover:bg-white/[0.03] transition">
+                <td class="px-3 py-2 text-indigo-400 font-bold text-[10px]">
+                  ${alert.scan_name}
+                </td>
+                <td class="px-3 py-2 font-mono font-bold text-white">
+                  ${symbol}
+                </td>
+                <td class="px-3 py-2 font-mono text-emerald-400">
+                        ${s.ltp ? s.ltp.toFixed(2) : '--'}
+                </td>
+                 <td class="px-2 py-1 font-mono text-gray-400 text-[10px] text-left">
+                  ${alert.datetime}
+                </td>
+                <td class="px-3 py-2 text-left space-x-2">
+                  <button onclick="openAlertModal('${symbol}', 'BUY')"
+                class="px-4 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[9px] font-black uppercase">
+                BUY
+            </button>
+            <button onclick="openAlertModal('${symbol}', 'SELL')"
+                class="px-4 py-0.5 bg-red-600 hover:bg-red-500 text-white rounded text-[9px] font-black uppercase">
+                SELL
+            </button>
+                </td>
+              </tr>
+            `);
+        });
+    });
+
+    container.innerHTML = rows.join('');
+}
+
+
+        function handleSignalTrade(sym, side) {
+    const match = marketFeed.find(x => x.symbol === sym);
+    if (!match) {
+        alert(`${sym} not found in monitored watchlist`);
+        return;
+    }
+    openModal(match.token, sym, side);
+}
+
+
+        function formatVol(v) {
+            const num = parseInt(v || 0);
+            if (num === 0) return "0";
+            if (num >= 10000000) return (num / 10000000).toFixed(2) + ' Cr';
+            if (num >= 100000) return (num / 100000).toFixed(2) + ' L';
+            if (num >= 1000) return (num / 1000).toFixed(1) + ' K';
+            return num.toString();
+        }
+
+        function renderMovers(id, items, action) {
+            const container = document.getElementById(id);
+            if (!items || items.length === 0) {
+                container.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-gray-700 italic text-[10px]">No Data Available</td></tr>';
+                return;
             }
-            
-            let html = '';
-            filteredItems.forEach(stock => {
-                let textClass = 'text-gray-300';
-                let bgClass = 'hover:bg-gray-800/50';
 
-                if(stock.color === 'DARKGREEN') {
-                    textClass = 'text-emerald-400 font-bold';
-                    bgClass = 'bg-emerald-900/10 hover:bg-emerald-900/20';
-                } else if(stock.color === 'RED') {
-                    textClass = 'text-red-400 font-bold';
-                    bgClass = 'bg-red-900/10 hover:bg-red-900/20';
-                }
+            container.innerHTML = items.map(s => {
+                const isBuy = action === 'BUY';
+                const ltp = parseFloat(s.ltp || 0);
+                const pct = parseFloat(s.pct_change || 0);
+                const vol = parseInt(s.volume || 0);
+                const turnover = parseFloat(s.turnover || 0);
                 
-                let fnoBadge = '';
-                if (stock.is_fno || stock.border === 'BLUE') {
-                    fnoBadge = `<span class="mr-2 text-[9px] bg-blue-600/60 text-blue-300 border border-blue-500/80 px-2 py-0.5 rounded font-bold tracking-wide font-mono shadow-md shadow-blue-900/60">FnO</span>`;
-                }
+                // Logic for showing Recovery from Low OR Drop from High
+                const metricValue = isBuy ? parseFloat(s.pct_from_low || 0) : parseFloat(s.pct_from_high || 0);
+                const metricIcon = isBuy ? '▲' : '▼';
+                const metricColor = isBuy ? 'text-emerald-500/80' : 'text-red-500/80';
+                
+                const volDisplay = formatVol(vol);
+                const turnoverCr = (turnover / 10000000).toFixed(2);
 
-                let volLacs = (stock.volume / 100000).toFixed(2);
-                let toCr = (stock.turnover / 10000000).toFixed(2);
-                let pctClass = stock.pct_change > 0 ? 'text-emerald-400' : 'text-red-400';
-                let pctFromLow = stock.pct_from_low !== undefined ? stock.pct_from_low.toFixed(2) : '0.00';
-
-                html += `
-                <tr class="transition duration-150 group border-b border-gray-800/50 last:border-0 ${bgClass}">
-                    <td class="px-3 py-3 font-medium flex items-center ${textClass}">
-                        ${fnoBadge}${stock.symbol}
+               return `
+                <tr class="hover:bg-white/[0.02] transition-colors group">
+                    <td class="px-4 py-3">
+                        <div class="flex flex-col">
+                            <span class="text-[11px] font-bold text-gray-200">${s.symbol || 'N/A'}</span>
+                            ${s.is_fno ? '<span class="text-[7px] text-blue-400 font-black tracking-widest uppercase">F&O</span>' : ''}
+                        </div>
                     </td>
-                    <td class="px-3 py-3 font-mono text-gray-200 text-right">₹${stock.ltp.toFixed(2)}</td>
-                    <td class="px-3 py-3 font-bold font-mono text-center ${pctClass}">
-                        ${stock.pct_change > 0 ? '+' : ''}${stock.pct_change.toFixed(2)}%
+                    <td class="px-2 py-3 text-right font-mono text-[11px] text-gray-300">₹${ltp.toFixed(2)}</td>
+                    <td class="px-2 py-3 text-center font-mono font-bold text-[11px] ${pct >= 0 ? 'text-emerald-400' : 'text-red-400'}">
+                        ${pct.toFixed(2)}%
                     </td>
-                    <td class="px-3 py-3 font-mono text-right text-xs hidden sm:table-cell">
-                        <span class="text-emerald-400">▲ ${pctFromLow}%</span>
+                    <td class="px-2 py-3 text-right font-mono text-[10px] ${metricColor}">
+                        ${metricIcon} ${Math.abs(metricValue).toFixed(2)}%
                     </td>
-                    <td class="px-3 py-3 font-mono text-gray-400 text-right text-xs hidden sm:table-cell">${volLacs}L</td>
-                    <td class="px-3 py-3 font-mono text-gray-400 text-right text-xs hidden sm:table-cell">${toCr}Cr</td>
-                    <td class="px-3 py-3 text-right">
-                        <button onclick="triggerLadder('${stock.token}', '${stock.symbol}', '${action}')" 
-                                class="opacity-0 group-hover:opacity-100 transition-all duration-200 
-                                       ${action === 'BUY' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-red-600 hover:bg-red-500'} 
-                                       text-white px-3 py-1 rounded text-[10px] font-bold shadow-lg tracking-wide transform hover:scale-105">
+                    <td class="px-2 py-3 text-right font-mono text-[10px] text-gray-400">
+                        ${volDisplay}
+                    </td>
+                    <td class="px-4 py-3 text-right font-mono text-[10px] text-gray-500">
+                        ${turnoverCr} Cr
+                    </td>
+                    <td class="px-4 py-3 text-right">
+                        <button onclick="openModal('${s.token}', '${s.symbol}', '${action}')" 
+                                class="px-3 py-1 rounded text-[9px] font-black uppercase transition-all shadow-lg 
+                                ${isBuy ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-red-600 hover:bg-red-500'} text-white">
                             ${action}
                         </button>
                     </td>
                 </tr>`;
-            });
-            tbody.innerHTML = html;
+            }).join('');
         }
 
-        // NEW: RENDER CHARTINK ALERTS
-        function renderAlerts(alerts) {
-            const container = document.getElementById('alerts-container');
-            if(!container) return;
-            if(!alerts || alerts.length === 0) {
-                container.innerHTML = `<div class="w-full py-4 text-center text-gray-600 text-xs italic">Waiting for signals...</div>`;
+        function renderPositions(pos) {
+            const list = document.getElementById('positions-body');
+            document.getElementById('pos-badge').innerText = `${pos.length} Active`;
+            if(pos.length === 0) {
+                list.innerHTML = '<tr><td colspan="5" class="py-20 text-center text-gray-700 italic">No open trades.</td></tr>';
                 return;
             }
-
-            container.innerHTML = alerts.map(alert => `
-                <div class="min-w-[280px] bg-gray-900/80 border border-gray-700/50 rounded-xl p-3 flex flex-col gap-2 hover:border-indigo-500/30 transition duration-300 shadow-xl">
-                    <div class="flex justify-between items-center">
-                        <span class="text-[9px] font-bold text-indigo-400 uppercase tracking-widest">${alert.scan_name}</span>
-                        <span class="text-[9px] text-gray-500 font-mono">${alert.timestamp}</span>
-                    </div>
-                    <div class="flex flex-wrap gap-1.5 mt-1">
-                        ${alert.stocks.split(',').map(stock => `
-                            <span class="px-2 py-0.5 bg-gray-800 text-white rounded text-[10px] font-bold border border-gray-700">
-                                ${stock.trim()}
-                            </span>
-                        `).join('')}
-                    </div>
-                </div>
+            list.innerHTML = pos.map(p => `
+                <tr class="hover:bg-white/[0.03] transition border-b border-gray-900/50">
+                    <td class="py-4 px-2 font-bold text-white">${p.symbol_name || p.id}</td>
+                    <td class="py-4 px-2"><span class="px-2 py-0.5 rounded text-[9px] font-bold border border-gray-800">${p.side || 'BUY'}</span> <span class="ml-2 font-mono text-[10px]">${p.qty || '--'}</span></td>
+                    <td class="py-4 px-2 text-right font-mono text-gray-500">${p.entry_price ? parseFloat(p.entry_price).toFixed(2) : '--'}</td>
+                    <td class="py-4 px-2 text-right font-mono text-gray-200">₹${parseFloat(p.ltp || 0).toFixed(2)}</td>
+                    <td class="py-4 px-2 text-right font-mono font-bold ${parseFloat(p.pnl || 0) >= 0 ? 'positive' : 'negative'}">${parseFloat(p.pnl || 0) >= 0 ? '+' : ''}${parseFloat(p.pnl || 0).toFixed(2)}</td>
+                </tr>
             `).join('');
         }
 
-        function triggerLadder(token, symbol, action) {
-            selectedToken = token;
-            selectedAction = action;
-            document.getElementById('stgSymbol').innerText = symbol;
-            const badge = document.getElementById('stgAction');
-            badge.innerText = action;
-            if(action === 'BUY') {
-                badge.className = "px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider border shadow-lg bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
+        function setEntryType(type) {
+            curEntryType = type;
+            const bC = document.getElementById('btnCap'), bQ = document.getElementById('btnQty'), l = document.getElementById('valueLabel'), i = document.getElementById('trade-value');
+            if(type === 'CAPITAL') {
+                bC.className = "flex-1 py-3 text-[10px] font-black rounded-xl bg-indigo-600 text-white shadow-lg";
+                bQ.className = "flex-1 py-3 text-[10px] font-black rounded-xl text-gray-500";
+                l.innerText = "Capital Allocation (₹)"; i.value = 10000;
             } else {
-                badge.className = "px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider border shadow-lg bg-red-500/20 text-red-400 border-red-500/30";
+                bQ.className = "flex-1 py-3 text-[10px] font-black rounded-xl bg-indigo-600 text-white shadow-lg";
+                bC.className = "flex-1 py-3 text-[10px] font-black rounded-xl text-gray-500";
+                l.innerText = "Per Trade Quantity(Qty)"; i.value = 50;
             }
-            document.getElementById('strategyModal').classList.remove('hidden');
         }
 
-        function closeStrategyModal() { 
-            document.getElementById('strategyModal').classList.add('hidden'); 
+       function openModal(t, s, a) {
+    const modal = document.getElementById('tradeModal');
+
+    // 🔥 RESET VISUAL STATE (MOST IMPORTANT)
+    modal.classList.remove('hidden');
+    modal.style.opacity = 1;
+    modal.style.transform = 'scale(1)';
+    modal.style.display = 'flex';
+    modal.style.pointerEvents = 'auto';
+
+    // RESET DATA STATE
+    sToken = t;
+    sSymbol = s;
+    sAction = a;
+
+    document.getElementById('modal-symbol').innerText = s;
+
+    const b = document.getElementById('modal-badge');
+    b.innerText = `${a} LADDER`;
+    b.className =
+        `mt-3 inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase ${
+            a === 'BUY'
+                ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                : 'bg-red-500/10 text-red-500 border border-red-500/20'
+        }`;
+}
+
+
+    function openAlertModal(symbol, side) {
+            sToken = null;       
+            sSymbol = symbol;
+            sAction = side;
+
+            document.getElementById('modal-symbol').innerText = symbol;
+
+            const badge = document.getElementById('modal-badge');
+            badge.innerText = `${side} LADDER`;
+            badge.className =
+                side === 'BUY'
+                ? 'mt-3 inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                : 'mt-3 inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase bg-red-500/10 text-red-500 border border-red-500/20';
+
+            // Smooth open
+            const modal = document.getElementById('tradeModal');
+            modal.classList.remove('hidden');
+            modal.style.opacity = 0;
+            modal.style.transform = 'scale(0.95)';
+
+            setTimeout(() => {
+                modal.style.transition = 'all 0.25s ease';
+                modal.style.opacity = 1;
+                modal.style.transform = 'scale(1)';
+            }, 10);
         }
 
-        async function confirmStrategyStart() {
-            const capital = document.getElementById('inputCapital').value;
-            const tsl = document.getElementById('inputTSL').value;
-            const increase = document.getElementById('inputIncrease').value;
-            if(!capital || capital < 500) { 
-                alert("Invalid Capital (Min 500)"); 
-                return; 
-            }
-            closeStrategyModal();
-            try {
-                const res = await fetch(window.location.origin + '/api/trigger-ladder/', {
-                    method: 'POST',
-                    body: JSON.stringify({ token: selectedToken, action: selectedAction, capital: capital, tsl: tsl, increase: increase }),
-                    headers: { 'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json' }
+
+       function closeModal() {
+    const modal = document.getElementById('tradeModal');
+
+    modal.style.opacity = 0;
+    modal.style.transform = 'scale(0.95)';
+    modal.style.pointerEvents = 'none';
+
+    setTimeout(() => {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }, 200);
+
+    // RESET GLOBAL STATE
+    sAction = null;
+    sToken = null;
+    sSymbol = null;
+}
+
+
+        async function executeTrade() {
+    try {
+        const payload = {
+            action: sAction,
+            entry_type: curEntryType,
+            entry_value: parseFloat(document.getElementById('trade-value').value),
+            tsl: parseFloat(document.getElementById('trade-tsl').value),
+            increase: parseFloat(document.getElementById('trade-add').value)
+        };
+
+        let url = '/api/trigger-ladder/';   // default
+
+        // 🔵 CHARTINK ALERT CASE
+        if (sToken === null) {
+            payload.symbol = sSymbol;
+            url = '/api/trigger-chartink-ladder/';
+        }
+        // 🟢 TOP GAINERS / LOSERS CASE
+        else {
+            payload.token = sToken;
+        }
+
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const d = await res.json();
+
+        if (d.status === 'success') {
+            closeModal();
+            sync();
+        } else {
+            alert(d.message || 'Execution failed');
+        }
+
+    } catch (e) {
+        console.error(e);
+        alert("Execution Failed");
+    }
+}
+
+        function toggleKillSwitch() {
+            fetch('/api/toggle-kill-switch/', { method: 'POST', headers: { 'X-CSRFToken': getCookie('csrftoken') } })
+            .then(res => res.json()).then(data => {
+                const l = document.getElementById('statusLabel');
+                l.innerHTML = `<span class="text-[10px] uppercase font-black tracking-widest ${data.is_enabled ? 'text-emerald-500' : 'text-red-500'}">${data.is_enabled ? 'SYSTEM LIVE' : 'SYSTEM HALTED'}</span><span class="text-[8px] text-gray-500 font-mono uppercase">Master Controls</span>`;
+            });
+        }
+
+        function getCookie(name) {
+            let v = null; if (document.cookie && document.cookie !== '') {
+                document.cookie.split(';').forEach(c => {
+                    const i = c.trim(); if (i.substring(0, name.length + 1) === (name + '=')) v = decodeURIComponent(i.substring(name.length + 1));
                 });
-                const data = await res.json();
-                if(data.status === 'success') { 
-                    alert("🚀 Strategy Deployed: " + data.message); 
-                    refreshDashboard(); 
-                } else { 
-                    alert("⚠️ Error: " + data.message); 
-                }
-            } catch(e) { 
-                console.error(e); 
-            }
+            } return v;
         }
 
-        async function refreshDashboard() {
-            try {
-                const res = await fetch(window.location.origin + '/api/dashboard-data/');
-                if(!res.ok) return;
-                const data = await res.json();
-                
-                if(data.status === 'success') {
-                    const now = new Date();
-                    document.getElementById('last-updated-time').innerText = now.toLocaleTimeString();
-
-                    document.getElementById('realized_pnl').innerText = `₹ ${data.realized_pnl}`;
-                    const upnl = document.getElementById('unrealized_pnl');
-                    upnl.innerText = `₹ ${data.unrealized_pnl}`;
-                    
-                    if(data.unrealized_pnl > 0) upnl.className = "text-4xl md:text-5xl font-bold font-mono tracking-tighter text-emerald-400 glow-text-green";
-                    else if(data.unrealized_pnl < 0) upnl.className = "text-4xl md:text-5xl font-bold font-mono tracking-tighter text-red-400 glow-text-red";
-                    else upnl.className = "text-4xl md:text-5xl font-bold font-mono tracking-tighter text-white";
-                    
-                    renderTable('gainers-body', data.gainers, 'BUY');
-                    renderTable('losers-body', data.losers, 'SELL');
-                    
-                    // NEW: Inject alerts data
-                    if(data.alerts) renderAlerts(data.alerts);
-                    
-                    data.positions.forEach(pos => {
-                        const ltpEl = document.getElementById(`ltp-${pos.id}`);
-                        const pnlEl = document.getElementById(`pnl-${pos.id}`);
-                        if(ltpEl) {
-                            let oldVal = parseFloat(ltpEl.innerText) || 0;
-                            if(pos.ltp > oldVal) ltpEl.parentElement.classList.add('flash-up');
-                            else if(pos.ltp < oldVal) ltpEl.parentElement.classList.add('flash-down');
-                            setTimeout(() => ltpEl.parentElement.classList.remove('flash-up', 'flash-down'), 800);
-                            ltpEl.innerText = pos.ltp;
-                        }
-                        if(pnlEl) {
-                            pnlEl.innerText = pos.pnl;
-                            pnlEl.className = `px-6 py-4 font-bold font-mono text-right ${pos.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
-                        }
-                    });
-                }
-            } catch(e) { 
-                console.log("Polling...", e); 
-            }
-        }
-        
-        async function toggleKillSwitch() {
-             const checkbox = document.getElementById('killSwitch');
-             const label = document.getElementById('statusLabel');
-             if (checkbox.checked) {
-                label.innerHTML = `
-                    <span class="text-[10px] uppercase font-bold text-emerald-500 tracking-wider glow-text-green">System Active</span>
-                    <span class="text-[9px] text-gray-400 font-mono">Live Execution ON</span>`;
-            } else {
-                label.innerHTML = `
-                    <span class="text-[10px] uppercase font-bold text-red-500 tracking-wider glow-text-red">System Halted</span>
-                    <span class="text-[9px] text-gray-400 font-mono">Execution STOPPED</span>`;
-            }
-             try { 
-                await fetch(window.location.origin + '/api/toggle-kill-switch/', { 
-                    method: 'POST', 
-                    headers: { 'X-CSRFToken': '{{ csrf_token }}' } 
-                }); 
-             } catch(e){}
-        }
-
-        setInterval(refreshDashboard, 5000);
-        refreshDashboard();
-    </script>
+</script>
 </body>
 </html>

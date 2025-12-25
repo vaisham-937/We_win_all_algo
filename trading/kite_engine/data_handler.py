@@ -69,7 +69,6 @@ class MarketDataHandler:
         if not self.tokens_map:
             logger.error("❌ No symbols mapped! Check settings.MONITORED_SYMBOLS")
             return
-
         self.kws.on_ticks = self.on_ticks
         self.kws.on_connect = self.on_connect
         self.kws.on_close = self.on_close
@@ -94,15 +93,11 @@ class MarketDataHandler:
         logger.error(f"⚠️ Ticker Error: {code} - {reason}")
 
     def on_ticks(self, ws, ticks):
-        """
-        Process live ticks, calculate metrics, update Redis state.
-        """
+        """Process live ticks, calculate metrics, update Redis state."""
         for tick in ticks:
             token = tick['instrument_token']
             meta = self.tokens_map.get(token)
-            
             if not meta: continue
-
             ltp = tick['last_price']
             
             # Extract OHLC
@@ -111,11 +106,14 @@ class MarketDataHandler:
             high = ohlc.get('high', ltp)
             low = ohlc.get('low', ltp)
             
-            # --- CALCULATIONS ---
+            # --- TURNOVER & VOLUME CALCULATION ---
+            # Volume is the total quantity traded today
             volume = tick.get('volume_traded', tick.get('volume', 0))
             avg_price = tick.get('average_price', ltp)
-            turnover = volume * avg_price if avg_price > 0 else volume * ltp
+            # Turnover = Volume Traded * Average Price
+            turnover = (volume * avg_price) if avg_price > 0 else (volume * ltp)
 
+            # 2. PERCENTAGE CALCULATIONS
             pct_change = ((ltp - close) / close) * 100 if close > 0 else 0
             
             # PERCENTAGE FROM DAY LOW
@@ -137,7 +135,7 @@ class MarketDataHandler:
                 'symbol': meta['symbol'],
                 'token': token,
                 'ltp': ltp,
-                'volume': volume,
+                'volume': int(volume),
                 'turnover': round(turnover, 2),
                 'pct_change': round(pct_change, 2),
                 'pct_from_high': round(pct_from_high, 2),
@@ -156,6 +154,7 @@ class MarketDataHandler:
             
             # 2. PUBLISH STREAM
             redis_client.publish("live_ticks", json_packet)
+            
             
             # 3. STRATEGY HOOK
             try:

@@ -99,20 +99,41 @@ class TradeLog(models.Model):
 
 class LadderState(models.Model):
     MODE_CHOICES = [('BUY', 'Buy Ladder'), ('SELL', 'Sell Ladder'), ('STOPPED', 'Stopped')]
-    
-    client = models.ForeignKey(ClientAccount, on_delete=models.CASCADE)
+    ENTRY_TYPE_CHOICES = [('QUANTITY', 'Fixed Quantity'), ('CAPITAL', 'Fixed Capital')]
+    LADDER_TYPES = (
+    ('MARKET', 'Market Ladder'),      # Gainers / Losers
+    ('CHARTINK', 'Chartink Ladder'),   # Alerts
+)
+    ladder_type = models.CharField(
+        max_length=20,
+        choices=LADDER_TYPES,
+        default='MARKET'
+    )
+
+    client = models.ForeignKey('ClientAccount', on_delete=models.CASCADE)
     symbol = models.ForeignKey('TradeSymbol', on_delete=models.CASCADE)
     
     is_active = models.BooleanField(default=False)
     current_mode = models.CharField(max_length=10, choices=MODE_CHOICES, default='STOPPED')
     
+    # --- Entry Mode Configuration ---
+    entry_type = models.CharField(
+        max_length=10, 
+        choices=ENTRY_TYPE_CHOICES, 
+        default='CAPITAL',
+        help_text="Choose if the initial order is based on quantity or total capital"
+    )
+    fixed_quantity = models.IntegerField(default=0, help_text="Used if entry_type is QUANTITY")
+    trade_capital = models.FloatField(default=10000.0, help_text="Used if entry_type is CAPITAL")
+    
+    # --- Dynamic State Tracking ---
     entry_price = models.FloatField(default=0.0)
     last_add_price = models.FloatField(default=0.0)
     extreme_price = models.FloatField(default=0.0)
     current_qty = models.IntegerField(default=0)
     level_count = models.IntegerField(default=0)
     
-    trade_capital = models.FloatField(default=10000.0)
+    # --- Strategy Parameters ---
     increase_pct = models.FloatField(default=1.0)
     tsl_pct = models.FloatField(default=1.0)
 
@@ -127,7 +148,6 @@ class LadderState(models.Model):
 
 class ChartinkAlert(models.Model):
     """Stores alerts received from Chartink via Webhook."""
-
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     scan_name = models.CharField(max_length=255)
     stocks = models.TextField(help_text="Comma-separated list of symbols")

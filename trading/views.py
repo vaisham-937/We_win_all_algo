@@ -1,7 +1,6 @@
-import json
+import json, time, logging
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
 from django.db.models import Sum
 from .models import ClientAccount, TradeLog, TradeSymbol, LadderState, ChartinkAlert
 from .kite_engine.account_manager import kite_session_manager
@@ -18,7 +17,11 @@ from django.contrib import messages
 from django_redis import get_redis_connection
 from .kite_engine.strategy_manager import start_buy_ladder, start_sell_ladder
 from django.http import JsonResponse, HttpResponse
+from django.contrib.auth.models import User
+from datetime import datetime
+import pytz
 
+logger = logging.getLogger(__name__)
 
 
 redis_client = get_redis_connection("ticks")
@@ -84,84 +87,9 @@ def toggle_kill_switch(request):
         account.save()
         
         status_text = "LIVE" if account.is_live_trading_enabled else "STOPPED"
-        return JsonResponse({
-            'status': 'success', 
-            'is_enabled': account.is_live_trading_enabled,
-            'message': f"Trading is now {status_text}"
-        })
+        return JsonResponse({ 'status': 'success', 'is_enabled': account.is_live_trading_enabled, 'message': f"Trading is now {status_text}"})
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-
-# --- NEW: SEARCH SYMBOLS API ---
-@login_required
-def search_instruments(request):
-    """Searches the Redis master list for a query string."""
-    query = request.GET.get('q', '').upper().strip()
-    if len(query) < 2:
-        return JsonResponse([], safe=False)
-    # Fetch master list from Redis
-    master_json = redis_client.get('master_instruments_list')
-    if not master_json:
-        return JsonResponse({'error': 'Instruments list not found. Run "python manage.py fetch_instruments"'}, status=500)
-
-    master_list = json.loads(master_json)
-    
-    # Filter Logic (Simple Python Filter)
-    # Returns top 10 matches where query is in the symbol name
-    results = []
-    for instr in master_list:
-        if query in instr['symbol']:
-            # Friendly display name
-            display_name = f"{instr['exchange']}: {instr['symbol']}"
-            if instr['name']:
-                display_name += f" ({instr['name']})"
-                
-            results.append({
-                'label': display_name, # What is shown in dropdown
-                'value': instr         # The full data object
-            })
-            
-            if len(results) >= 20: # Limit to 20 results for speed
-                break
-    
-    return JsonResponse(results, safe=False)
-
-# --- NEW: ADD SYMBOL TO DB ---
-@login_required
-@require_http_methods(["POST"])
-def add_symbol(request):
-    """Adds the selected JSON object from search to the TradeSymbol DB."""
-    try:
-        data = json.loads(request.body)
-        instr = data.get('instrument')
-        
-        # Check if already exists
-        if TradeSymbol.objects.filter(instrument_token=instr['token']).exists():
-            return JsonResponse({'status': 'error', 'message': 'Symbol already added!'})
-
-        # Determine Price Band Color automatically (Default logic)
-        color = 'GREEN'
-        if instr['segment'] in ['NFO-FUT', 'NFO-OPT']:
-            color = 'BLUE'
-
-        # Create the entry
-        TradeSymbol.objects.create(
-            symbol=instr['symbol'],
-            instrument_token=str(instr['token']),
-            exchange=instr['exchange'],
-            segment=instr['segment'],
-            qty_type='ABS',
-            absolute_quantity=instr['lot_size'] if instr['lot_size'] > 0 else 1,
-            price_band_color=color,
-            is_active=True
-        )
-        
-        return JsonResponse({'status': 'success', 'message': f"Added {instr['symbol']} successfully!"})
-        
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'message': str(e)})
-
-
 
 # --- 4. DASHBOARD & STRATEGY ---
 @login_required
@@ -234,10 +162,7 @@ def credentials_view(request):
             account.save()
             message = f"Kill Switch set to: {'ENABLED' if account.is_live_trading_enabled else 'DISABLED'}."
             
-    context = {
-        'account': account,
-        'message': message
-    }
+    context = { 'account': account,'message': message }
     return render(request, 'trading/credentials.html', context)
 
 @login_required
@@ -302,133 +227,82 @@ def get_realtime_pnl(request):
                 'entry_price': trade.entry_price,
                 'ltp': ltp,
                 'pnl': round(pnl, 2)
-            })
-            
+            })   
     return JsonResponse({
-        'total_unrealized_pnl': round(unrealized_pnl, 2),
-        'positions': positions_data,
-        'timestamp': timezone.now().strftime("%H:%M:%S")
-    })
+        'total_unrealized_pnl': round(unrealized_pnl, 2),'positions': positions_data,'timestamp': timezone.now().strftime("%H:%M:%S")})
 
 
-# --- TRIGGER LADDER (AUTO-RECOVERY FIX) ---
-# @login_required
-# @require_http_methods(["POST"])
-# def trigger_ladder(request):
-#     try:
-#         data = json.loads(request.body)
-#         token = str(data.get('token'))
-#         action = data.get('action')
-#         custom_capital = float(data.get('capital', 10000.0))
-        
-#         account = ClientAccount.objects.get(user=request.user)
-        
-#        # 1. FETCH REDIS DATA FIRST
-#         # [FIX] Use redis_client.get() to match the Ticker's Raw Format
-#         tick_json = redis_client.get(f"tick:{token}")
-
-#         if not tick_json:
-#             return JsonResponse({'status': 'error', 'message': 'No Live Data in Redis. Check Ticker.'})
-        
-#         tick_data = json.loads(tick_json)
-        
-#         # 2. AUTO-RECOVER SYMBOL IF MISSING IN DB
-#         symbol = TradeSymbol.objects.filter(instrument_token=token).first()
-#         if not symbol:
-#             # Create it from Redis Data
-#             if 'exchange' in tick_data:
-#                 symbol = TradeSymbol.objects.create(
-#                     symbol=tick_data['symbol'],
-#                     instrument_token=token,
-#                     exchange=tick_data['exchange'],
-#                     segment=tick_data['segment'],
-#                     absolute_quantity=tick_data.get('lot_size', 1),
-#                     is_active=True
-#                 )
-#                 print(f"Recovered {symbol.symbol} from Redis")
-#             else:
-#                 return JsonResponse({'status': 'error', 'message': 'Restart Ticker to update metadata.'})
-
-#         # 3. START STRATEGY
-#         ladder, _ = LadderState.objects.get_or_create(client=account, symbol=symbol)
-#         ladder.trade_capital = custom_capital
-#         ladder.increase_pct = float(data.get('increase', 1.0))
-#         ladder.tsl_pct = float(data.get('tsl', 1.0))
-#         ladder.save()
-        
-#         from trading.kite_engine.strategy_manager import start_buy_ladder, start_sell_ladder
-#         if action == 'BUY': start_buy_ladder(ladder, tick_data['ltp'])
-#         elif action == 'SELL': start_sell_ladder(ladder, tick_data['ltp'])
-            
-#         return JsonResponse({'status': 'success', 'message': f'{action} Ladder Started'})
-        
-#     except Exception as e:
-#         return JsonResponse({'status': 'error', 'message': str(e)})
-
-
+@csrf_exempt
 @login_required
-@require_http_methods(["POST"])
 def trigger_ladder(request):
     try:
         data = json.loads(request.body)
         token = str(data.get('token'))
         action = data.get('action')
-        custom_capital = float(data.get('capital', 10000.0))
+        
+        # --- NEW: Get Entry Type and Values ---
+        entry_type = data.get('entry_type', 'CAPITAL') # 'CAPITAL' or 'QUANTITY'
+        entry_value = float(data.get('entry_value', 10000.0))
         
         account = ClientAccount.objects.get(user=request.user)
         
-        # 1. FETCH REDIS DATA FIRST
-        # [FIX] Use redis_client.get() to match the Ticker's Raw Format
+        # 1. FETCH REDIS DATA
         tick_json = redis_client.get(f"tick:{token}")
-        
         if not tick_json:
             return JsonResponse({'status': 'error', 'message': 'No Live Data in Redis. Check Ticker.'})
         
         tick_data = json.loads(tick_json)
         
-        # 2. AUTO-RECOVER SYMBOL IF MISSING IN DB
+        # 2. FETCH OR RECOVER SYMBOL
         symbol = TradeSymbol.objects.filter(instrument_token=token).first()
         if not symbol:
-            if 'symbol' in tick_data: # Ensure 'symbol' key exists
-                # Determine color logic if needed or default
+            if 'symbol' in tick_data:
                 color = 'GREEN'
                 if tick_data.get('is_fno'): color = 'BLUE'
-
                 symbol = TradeSymbol.objects.create(
                     symbol=tick_data['symbol'],
                     instrument_token=token,
-                    exchange=tick_data.get('exchange', 'NSE'), # Fallback to NSE if missing
+                    exchange=tick_data.get('exchange', 'NSE'),
                     segment=tick_data.get('segment', 'EQ'),
-                    absolute_quantity=1, # Default to 1 if not in data
+                    absolute_quantity=1,
                     price_band_color=color,
                     is_active=True
                 )
-                print(f"Recovered {symbol.symbol} from Redis")
             else:
-                return JsonResponse({'status': 'error', 'message': 'Restart Ticker to update metadata.'})
+                return JsonResponse({'status': 'error', 'message': 'Symbol metadata missing. Restart Ticker.'})
 
-        # 3. START STRATEGY
+        # 3. UPDATE STRATEGY STATE
         ladder, _ = LadderState.objects.get_or_create(client=account, symbol=symbol)
-        ladder.trade_capital = custom_capital
+        
+        # --- NEW: Assign values based on Entry Type ---
+        ladder.entry_type = entry_type
+        if entry_type == 'QUANTITY':
+            ladder.fixed_quantity = int(entry_value)
+            ladder.trade_capital = 0.0 # Clear capital to avoid confusion
+        else:
+            ladder.trade_capital = entry_value
+            ladder.fixed_quantity = 0 # Clear quantity to avoid confusion
+
         ladder.increase_pct = float(data.get('increase', 1.0))
         ladder.tsl_pct = float(data.get('tsl', 1.0))
         ladder.save()
         
-        from trading.kite_engine.strategy_manager import start_buy_ladder, start_sell_ladder
+        # 4. START STRATEGY
+        from .kite_engine.strategy_manager import start_buy_ladder, start_sell_ladder
         
-        # Pass LTP directly
         current_ltp = tick_data.get('ltp', 0)
         if current_ltp > 0:
-            if action == 'BUY': start_buy_ladder(ladder, current_ltp)
-            elif action == 'SELL': start_sell_ladder(ladder, current_ltp)
+            if action == 'BUY': 
+                start_buy_ladder(ladder, current_ltp)
+            elif action == 'SELL': 
+                start_sell_ladder(ladder, current_ltp)
             
-            return JsonResponse({'status': 'success', 'message': f'{action} Ladder Started'})
+            return JsonResponse({'status': 'success', 'message': f'{action} Ladder Initialized'})
         else:
-             return JsonResponse({'status': 'error', 'message': 'LTP is zero or invalid.'})
+            return JsonResponse({'status': 'error', 'message': 'LTP is zero. Cannot start ladder.'})
         
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)})
-
 
 # --- NEW: AJAX DATA API (REDIS FETCH) ---
 @login_required
@@ -484,7 +358,6 @@ def get_dashboard_data(request):
                     'ltp': ltp, 
                     'pnl': round(curr_val, 2)
                 })
-
         return JsonResponse({
             'status': 'success',
             'realized_pnl': round(realized, 2),
@@ -493,88 +366,230 @@ def get_dashboard_data(request):
             'losers': [x for x in losers if x.get('pct_change', 0) < 0][:20],   # Top 20
             'positions': open_pos_data
         })
-        
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)})
 
 
+from django.core.cache import cache
+# @csrf_exempt
+# def chartink_webhook(request, user_id):
+#     if request.method != 'POST':
+#         return HttpResponse("Listening...")
+#     try:
+#         data = json.loads(request.body)
+#         stocks_str = data.get('stocks', '')
+#         scan_name = data.get('scan_name', 'Chartink Alert')
+
+#         ist = pytz.timezone("Asia/Kolkata")
+#         now = datetime.now(ist)
+#         today = now.strftime("%Y-%m-%d")
+
+#         redis_key = f"chartink_alerts:{user_id}:{today}"
+#         seen_key = f"chartink_seen:{user_id}:{today}:{scan_name}"
+
+#         seen = redis_client.smembers(seen_key)
+#         stocks = []
+#         for s in stocks_str.split(','):
+#             s = s.strip()
+#             if s and s not in seen:
+#                 stocks.append(s)
+#                 redis_client.sadd(seen_key, s)
+#         if not stocks:
+#             return JsonResponse({"status": "ignored"})
+#         alert_packet = {
+#             "id": int(time.time() * 1000),
+#             "scan_name": scan_name,
+#             "stocks": stocks,
+#             "datetime": now.strftime("%a, %b %d, %Y %I:%M %p"),
+#             "timestamp": int(time.time())
+#         }
+#         redis_client.lpush(redis_key, json.dumps(alert_packet))
+#         redis_client.ltrim(redis_key, 0, 50)
+#         return JsonResponse({"status": "success"})
+#     except Exception as e:
+#         return JsonResponse({"status": "error", "message": str(e)}, status=400)
+
+
+from django.core.cache import cache
 @csrf_exempt
-def chartink_webhook(request):
-    """
-    Endpoint for Chartink Webhooks.
-    Chartink sends JSON: { "stocks": "RELIANCE,SBIN", "trigger_price": "2500", "scan_name": "Breakout" }
-    """
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            stocks_str = data.get('stocks', '')
-            scan_name = data.get('scan_name', 'Chartink Alert')
-            
-            # Save the alert to the database
-            # Note: Since Webhooks are unauthenticated, we might assign it to a default admin or 
-            # use a specific URL parameter to identify the user (e.g., /webhook/chartink/?user_id=1)
-            user_id = request.GET.get('user_id')
-            alert = ChartinkAlert.objects.create(
-                scan_name=scan_name,
-                stocks=stocks_str,
-                trigger_price=float(data.get('trigger_price', 0) or 0)
-            )
-            return JsonResponse({"status": "success", "alert_id": alert.id})
-        except Exception as e:
-            return JsonResponse({"status": "error", "message": str(e)}, status=400)
-    return HttpResponse("Webhook Active", status=200)
+def chartink_webhook(request, user_id):
+    if request.method != 'POST':
+        return HttpResponse("Listening...")
+    try:
+        data = json.loads(request.body)
+        stocks_str = data.get('stocks', '')
+        scan_name = data.get('scan_name', 'Chartink Alert')
 
-def get_alerts_api(request):
-    """Returns the latest 10 alerts for the dashboard."""
-    alerts = ChartinkAlert.objects.all()[:10]
-    data = []
-    for a in alerts:
-        data.append({
-            "id": a.id,
-            "scan_name": a.scan_name,
-            "stocks": a.stocks.split(','),
-            "time": a.timestamp.strftime("%H:%M:%S"),
-            "price": a.trigger_price
-        })
-    return JsonResponse({"status": "success", "alerts": data})
+        ist = pytz.timezone("Asia/Kolkata")
+        now = datetime.now(ist)
+        today = now.strftime("%Y-%m-%d")
 
-def execute_alert_trade(request):
-    """
-    Called when user clicks Buy/Sell on an alert stock.
-    Initializes the Ladder logic.
-    """
-    if request.method == 'POST':
+        redis_key = f"chartink_alerts:{user_id}:{today}"
+        seen_key = f"chartink_seen:{user_id}:{today}:{scan_name}"
+
+        seen = redis_client.smembers(seen_key)
+        cash_master = cache.get("NSE_CASH_MASTER", {})
+
+        stocks_payload = []
+
+        for s in stocks_str.split(','):
+            s = s.strip()
+            if not s or s.encode() in seen:
+                continue
+
+            # ✅ CASH VALIDATION
+            if s not in cash_master:
+                continue
+
+            token = cash_master[s]["token"]
+
+            # ✅ GET LIVE LTP FROM REDIS
+            tick = redis_client.get(f"tick:{token}")
+            ltp = json.loads(tick)["ltp"] if tick else None
+
+            stocks_payload.append({
+                "symbol": s,
+                "token": token,
+                "ltp": ltp
+            })
+            redis_client.sadd(seen_key, s)
+
+        if not stocks_payload:
+            return JsonResponse({"status": "ignored"})
+
+        alert_packet = {
+            "id": int(time.time() * 1000),
+            "scan_name": scan_name,
+            "stocks": stocks_payload,
+            "datetime": now.strftime("%a, %b %d, %Y %I:%M %p"),
+            "timestamp": int(time.time())
+        }
+        redis_client.lpush(redis_key, json.dumps(alert_packet))
+        redis_client.ltrim(redis_key, 0, 50)
+
+        return JsonResponse({"status": "success"})
+
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=400)
+
+
+
+# ========== Chartink Trigger API 
+# +==================================
+@csrf_exempt
+@login_required
+def trigger_chartink_ladder(request):
+    try:
         data = json.loads(request.body)
         symbol_name = data.get('symbol')
-        side = data.get('side') # 'BUY' or 'SELL'
-        
-        # 1. Get/Create TradeSymbol
-        symbol_obj = TradeSymbol.objects.filter(symbol=symbol_name).first()
-        if not symbol_obj:
-            return JsonResponse({"status": "error", "message": "Symbol not in watchlist"}, status=400)
-            
-        # 2. Get/Create LadderState
+        action = data.get('action', 'BUY')
+
         account = ClientAccount.objects.get(user=request.user)
+
+        # 1️⃣ Symbol resolve
+        symbol = TradeSymbol.objects.filter(symbol=symbol_name).first()
+        if not symbol:
+            return JsonResponse({'status': 'error','message': f'{symbol_name} not in monitored list' })
+
+        # 2️⃣ Ladder create
+        ladder, _ = LadderState.objects.get_or_create(
+            client=account,
+            symbol=symbol,
+            ladder_type='CHARTINK'
+        )
+        ladder.entry_type = data.get('entry_type', 'CAPITAL')
+        ladder.trade_capital = float(data.get('entry_value', 10000))
+        ladder.fixed_quantity = int(data.get('entry_value', 1))
+        ladder.tsl_pct = float(data.get('tsl', 1.0))
+        ladder.increase_pct = float(data.get('increase', 1.0))
+        ladder.save()
+
+        # 3️⃣ LTP optional (Chartink safe mode)
+        tick = redis_client.get(f"tick_symbol:{symbol.symbol}")
+        ltp = json.loads(tick)['ltp'] if tick else None
+
+        from .kite_engine.strategy_manager import start_chartink_ladder
+        start_chartink_ladder(ladder, ltp, action)
+
+        return JsonResponse({'status': 'success', 'message': 'Chartink ladder started'})
+
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)})
+
+
+@login_required
+def get_alerts_api(request):
+    try:
+        ist = pytz.timezone("Asia/Kolkata")
+        today = datetime.now(ist).strftime("%Y-%m-%d")
+
+        redis_key = f"chartink_alerts:{request.user.id}:{today}"
+
+        raw_alerts = redis_client.lrange(redis_key, 0, -1)
+        alerts = [json.loads(a) for a in raw_alerts]
+
+        return JsonResponse({"status": "success","alerts": alerts,"date": today})
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)})
+
+@csrf_exempt
+@login_required
+def execute_alert_trade(request):
+    """Start ladder trade from: -1. Top Gainers / Losers (token available) -2. Chartink Alerts (only symbol available) """
+    if request.method != "POST":
+        return JsonResponse({"status": "error", "message": "Invalid method"}, status=405)
+    try:
+        data = json.loads(request.body)
+
+        token = data.get("token")          # may be None for Chartink
+        symbol_name = data.get("symbol")   # MUST for Chartink
+        side = data.get("action", "BUY")
+
+        if not symbol_name:
+            return JsonResponse({"status": "error", "message": "Symbol missing"}, status=400)
+
+        # ---------------------------------------------------
+        # 1️⃣ Resolve TradeSymbol
+        # ---------------------------------------------------
+        symbol_obj = None
+
+        if token:
+            symbol_obj = TradeSymbol.objects.filter(instrument_token=token).first()
+
+        if not symbol_obj:
+            symbol_obj = TradeSymbol.objects.filter( symbol=symbol_name).first()
+
+        if not symbol_obj:
+            return JsonResponse({"status": "error","message": f"{symbol_name} not found in monitored watchlist"}, status=400)
+
+        # ---------------------------------------------------
+        # 2️⃣ Get client account
+        # ---------------------------------------------------
+        account = ClientAccount.objects.get(user=request.user)
+
         ladder, _ = LadderState.objects.get_or_create(client=account, symbol=symbol_obj)
-        
-        # 3. Prevent multiple ladders on same stock
+
         if ladder.is_active:
-            return JsonResponse({"status": "error", "message": "Ladder already active for this stock"}, status=400)
+            return JsonResponse({"status": "error", "message": "Ladder already running"}, status=400)
 
-        # 4. Fetch current LTP from Redis (provided by Ticker)
-        import django_redis
-        redis_client = django_redis.get_redis_connection("ticks")
+        # ---------------------------------------------------
+        # 3️⃣ Get live price from Redis
+        # ---------------------------------------------------
         tick_data = redis_client.get(f"tick:{symbol_obj.instrument_token}")
-        
         if not tick_data:
-            return JsonResponse({"status": "error", "message": "No live price data yet"}, status=400)
-        
-        ltp = json.loads(tick_data)['ltp']
+            return JsonResponse({ "status": "error","message": "Live price not available"}, status=400)
 
-        # 5. Start Ladder
-        if side == 'BUY':
+        ltp = json.loads(tick_data)["ltp"]
+
+        # ---------------------------------------------------
+        # 4️⃣ Start ladder
+        # ---------------------------------------------------
+        if side == "BUY":
             start_buy_ladder(ladder, ltp)
         else:
             start_sell_ladder(ladder, ltp)
-            
-        return JsonResponse({"status": "success", "message": f"{side} Ladder Started for {symbol_name}"})
+
+        return JsonResponse({"status": "success","message": f"{side} ladder started for {symbol_name}"})
+    except Exception as e:
+        print("❌ execute_alert_trade error:", e)
+        return JsonResponse({ "status": "error", "message": str(e)}, status=500)
