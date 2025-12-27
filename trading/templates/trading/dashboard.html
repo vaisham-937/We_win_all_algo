@@ -186,7 +186,6 @@
                         <tr>
                             <th class="px-4 py-4 text-left">Scan</th>
                             <th class="px-4 py-4 text-left">Symbol</th>
-                            <th class="px-4 py-4 text-left">LTP</th>
                             <th class="px-4 py-4 text-left">Time</th>
                             <th class="px-4 py-4 text-left">Action</th>
                         </tr>
@@ -273,7 +272,7 @@
         <!-- Portfolio Positions -->
     <div class="glass rounded-3xl overflow-hidden card-glow glass-hover shadow-2xl">            
         <div class="p-5 border-b border-gray-800 bg-gray-950/40 flex justify-between items-center">
-                <h3 class="text-xs font-bold text-white uppercase tracking-[0.2em]">Open Portfolio</h3>
+                <h3 class="text-xs font-bold text-white uppercase tracking-[0.2em]">Open Positions</h3>
                 <span id="pos-badge" class="text-[10px] font-mono bg-indigo-500/10 text-indigo-400 px-3 py-1 rounded-full border border-indigo-500/20">0 Active</span>
             </div>
             <div class="overflow-x-auto">
@@ -476,6 +475,7 @@
 
         let sToken = null, sSymbol = null, sAction = 'BUY';
         let curEntryType = 'CAPITAL';
+        let tradeLock = false;
 
         async function sync() {
             try {
@@ -541,9 +541,6 @@
                 </td>
                 <td class="px-3 py-2 font-mono font-bold text-white">
                   ${symbol}
-                </td>
-                <td class="px-3 py-2 font-mono text-emerald-400">
-                        ${s.ltp ? s.ltp.toFixed(2) : '--'}
                 </td>
                  <td class="px-2 py-1 font-mono text-gray-400 text-[10px] text-left">
                   ${alert.datetime}
@@ -727,27 +724,34 @@
             }, 10);
         }
 
-
-       function closeModal() {
-    const modal = document.getElementById('tradeModal');
-
-    modal.style.opacity = 0;
-    modal.style.transform = 'scale(0.95)';
-    modal.style.pointerEvents = 'none';
-
-    setTimeout(() => {
-        modal.classList.add('hidden');
-        modal.style.display = 'none';
-    }, 200);
-
-    // RESET GLOBAL STATE
+function resetTradeState() {
     sAction = null;
     sToken = null;
     sSymbol = null;
+    curEntryType = "CAPITAL";
+    tradeLock = false;
 }
 
 
-        async function executeTrade() {
+  function closeModal() {
+    document.getElementById("tradeModal").classList.add("hidden");
+    resetTradeState();   // 🔥 REQUIRED
+}
+
+
+
+async function executeTrade() {
+    if (tradeLock) return;          // 🔒 prevent double click
+    tradeLock = true;
+
+    const btn = document.querySelector(
+        '#tradeModal button.bg-indigo-600'
+    );
+
+    const originalText = btn.innerText;
+    btn.innerText = "EXECUTING...";
+    btn.style.pointerEvents = "none";
+
     try {
         const payload = {
             action: sAction,
@@ -757,7 +761,7 @@
             increase: parseFloat(document.getElementById('trade-add').value)
         };
 
-        let url = '/api/trigger-ladder/';   // default
+        let url = '/api/trigger-ladder/';
 
         // 🔵 CHARTINK ALERT CASE
         if (sToken === null) {
@@ -781,8 +785,8 @@
         const d = await res.json();
 
         if (d.status === 'success') {
-            closeModal();
-            sync();
+            closeModal();      // 🔥 close instantly
+            sync();            // async dashboard refresh
         } else {
             alert(d.message || 'Execution failed');
         }
@@ -790,8 +794,13 @@
     } catch (e) {
         console.error(e);
         alert("Execution Failed");
+    } finally {
+        tradeLock = false;
+        btn.innerText = originalText;
+        btn.style.pointerEvents = "auto";
     }
 }
+
 
         function toggleKillSwitch() {
             fetch('/api/toggle-kill-switch/', { method: 'POST', headers: { 'X-CSRFToken': getCookie('csrftoken') } })

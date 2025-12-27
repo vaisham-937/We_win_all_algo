@@ -179,13 +179,13 @@ CELERY_BEAT_SCHEDULE = {
         # ✅ Runs once daily
     'fetch-instruments-every-morning': {
         'task': 'trading.tasks.cache_nse_cash_instruments',
-        'schedule': crontab(hour=20, minute=00),
+        'schedule': crontab(hour=12, minute=15),
     },
 
-#    'run-active-ladders-every-5-seconds': {
-#         'task': 'trading.tasks.run_active_ladders',
-#         'schedule': 5.0,
-#     },
+   'run-active-ladders-every-5-seconds': {
+        'task': 'trading.tasks.run_active_ladders',
+        'schedule': 5.0,
+    },
 }
 
 

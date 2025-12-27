@@ -20,6 +20,7 @@ from django.http import JsonResponse, HttpResponse
 from django.contrib.auth.models import User
 from datetime import datetime
 import pytz
+from .kite_engine.data_handler import MarketDataHandler
 
 logger = logging.getLogger(__name__)
 
@@ -370,7 +371,6 @@ def get_dashboard_data(request):
         return JsonResponse({'status': 'error', 'message': str(e)})
 
 
-from django.core.cache import cache
 # @csrf_exempt
 # def chartink_webhook(request, user_id):
 #     if request.method != 'POST':
@@ -409,16 +409,23 @@ from django.core.cache import cache
 #     except Exception as e:
 #         return JsonResponse({"status": "error", "message": str(e)}, status=400)
 
+redis_db = get_redis_connection("default")
 
-from django.core.cache import cache
 @csrf_exempt
 def chartink_webhook(request, user_id):
+    logger.info(f"\033[91m📥 Chartink payload received:\033[0m {request.body.decode('utf-8')}")
     if request.method != 'POST':
         return HttpResponse("Listening...")
+
     try:
         data = json.loads(request.body)
-        stocks_str = data.get('stocks', '')
-        scan_name = data.get('scan_name', 'Chartink Alert')
+
+        stocks_str = data.get("stocks", "")
+        scan_name = data.get("scan_name", "Chartink Alert")
+
+        raw_stocks = [s.strip() for s in stocks_str.split(",") if s.strip()]
+        if not raw_stocks:
+            return JsonResponse({"status": "ignored"})
 
         ist = pytz.timezone("Asia/Kolkata")
         now = datetime.now(ist)
@@ -427,50 +434,100 @@ def chartink_webhook(request, user_id):
         redis_key = f"chartink_alerts:{user_id}:{today}"
         seen_key = f"chartink_seen:{user_id}:{today}:{scan_name}"
 
-        seen = redis_client.smembers(seen_key)
-        cash_master = cache.get("NSE_CASH_MASTER", {})
+        # Fetch seen stocks
+        seen = redis_db.smembers(seen_key)
+        seen = {s.decode() if isinstance(s, bytes) else s for s in seen}
 
-        stocks_payload = []
-
-        for s in stocks_str.split(','):
-            s = s.strip()
-            if not s or s.encode() in seen:
-                continue
-
-            # ✅ CASH VALIDATION
-            if s not in cash_master:
-                continue
-
-            token = cash_master[s]["token"]
-
-            # ✅ GET LIVE LTP FROM REDIS
-            tick = redis_client.get(f"tick:{token}")
-            ltp = json.loads(tick)["ltp"] if tick else None
-
-            stocks_payload.append({
-                "symbol": s,
-                "token": token,
-                "ltp": ltp
-            })
-            redis_client.sadd(seen_key, s)
-
-        if not stocks_payload:
+        new_stocks = []
+        for s in raw_stocks:
+            if s not in seen:
+                new_stocks.append(s)
+                redis_db.sadd(seen_key, s)
+        if not new_stocks:
             return JsonResponse({"status": "ignored"})
-
         alert_packet = {
             "id": int(time.time() * 1000),
             "scan_name": scan_name,
-            "stocks": stocks_payload,
+            "stocks": new_stocks,
             "datetime": now.strftime("%a, %b %d, %Y %I:%M %p"),
             "timestamp": int(time.time())
         }
-        redis_client.lpush(redis_key, json.dumps(alert_packet))
-        redis_client.ltrim(redis_key, 0, 50)
-
+        redis_db.lpush(redis_key, json.dumps(alert_packet))
+        redis_db.ltrim(redis_key, 0, 50)
         return JsonResponse({"status": "success"})
-
     except Exception as e:
+        logger.exception("❌ Chartink webhook error")
         return JsonResponse({"status": "error", "message": str(e)}, status=400)
+
+# @csrf_exempt
+# def chartink_webhook(request, user_id):
+#     # chartink_webhook view ke andar
+#     logger.info(f"📥 Chartink payload received: {request.body}")
+
+#     if request.method != 'POST':
+#         return HttpResponse("Listening...")
+#     try:
+#         data = json.loads(request.body)
+#         stocks_str = data.get('stocks', '')
+#         scan_name = data.get('scan_name', 'Chartink Alert')
+
+#         ist = pytz.timezone("Asia/Kolkata")
+#         now = datetime.now(ist)
+#         today = now.strftime("%Y-%m-%d")
+
+#         redis_key = f"chartink_alerts:{user_id}:{today}"
+#         seen_key = f"chartink_seen:{user_id}:{today}:{scan_name}"
+
+#         seen = redis_client.smembers(seen_key)
+#         raw = redis_client.get(":1:NSE_CASH_MASTER")
+#         cash_master = json.loads(raw) if raw else {}
+
+#         stocks_payload = []
+
+#         for s in stocks_str.split(','):
+#             s = s.strip()
+#             if not s or s.encode() in seen:
+#                 continue
+
+#             # ✅ CASH VALIDATION
+#             # if s not in cash_master:
+#             #     continue
+
+#             token = cash_master[s]["token"]
+#             logger.info(f"🔥 Checking symbol {s}, in cash_master={s in cash_master}")
+
+
+#             # ✅ GET LIVE LTP FROM REDIS
+#             tick = redis_client.get(f"tick:{token}")
+#             ltp = json.loads(tick)["ltp"] if tick else None
+
+#             stocks_payload.append({
+#                 "symbol": s,
+#                 "token": token,
+#                 "ltp": ltp
+#             })
+#             logger.info(f"🔥 stocks_payload before push = {stocks_payload}")
+
+#             redis_client.sadd(seen_key, s)
+
+#         if not stocks_payload:
+#             return JsonResponse({"status": "ignored"})
+
+#         alert_packet = {
+#             "id": int(time.time() * 1000),
+#             "scan_name": scan_name,
+#             "stocks": [s["symbol"] for s in stocks_payload],
+#             "datetime": now.strftime("%a, %b %d, %Y %I:%M %p"),
+#             "timestamp": int(time.time())
+#         }
+#         redis_client.lpush(redis_key, json.dumps(alert_packet))
+#         redis_client.ltrim(redis_key, 0, 50)
+#         print("🔥 Payload:", alert_packet)
+
+#         return JsonResponse({"status": "success"})
+
+#     except Exception as e:
+#         return JsonResponse({"status": "error", "message": str(e)}, status=400)
 
 
 
@@ -506,6 +563,8 @@ def trigger_chartink_ladder(request):
 
         # 3️⃣ LTP optional (Chartink safe mode)
         tick = redis_client.get(f"tick_symbol:{symbol.symbol}")
+        # tick = redis_client.get(f"tick:{symbol.instrument_token}")
+
         ltp = json.loads(tick)['ltp'] if tick else None
 
         from .kite_engine.strategy_manager import start_chartink_ladder
@@ -524,13 +583,23 @@ def get_alerts_api(request):
         today = datetime.now(ist).strftime("%Y-%m-%d")
 
         redis_key = f"chartink_alerts:{request.user.id}:{today}"
+        print( f"\033[94m🔥 Chartink Redis key:\033[0m " f"\033[96m{redis_key}\033[0m")
 
-        raw_alerts = redis_client.lrange(redis_key, 0, -1)
-        alerts = [json.loads(a) for a in raw_alerts]
-
-        return JsonResponse({"status": "success","alerts": alerts,"date": today})
+        raw_alerts = redis_db.lrange(redis_key, 0, -1)
+        print(f"\033[92m🔥 Raw alerts:\033[0m {raw_alerts}")
+        alerts = [
+            json.loads(a.decode("utf-8") if isinstance(a, bytes) else a)
+            for a in raw_alerts
+        ]
+        return JsonResponse({
+            "status": "success",
+            "alerts": alerts,
+            "count": len(alerts),
+            "date": today
+        })
     except Exception as e:
-        return JsonResponse({"status": "error", "message": str(e)})
+        logger.exception("❌ get_alerts_api error")
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
 @csrf_exempt
 @login_required

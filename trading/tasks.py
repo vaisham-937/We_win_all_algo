@@ -9,9 +9,10 @@ from trading.kite_engine.strategy_manager import start_buy_ladder, start_sell_la
 import redis, json
 from kiteconnect import KiteConnect
 from django.conf import settings
+from celery.exceptions import Retry
 
 logger = logging.getLogger(__name__)
-redis_client = get_redis_connection("default")
+redis_client = get_redis_connection("ticks")
 
 
 # @shared_task(bind=True,autoretry_for=(Exception,),retry_backoff=30,retry_kwargs={"max_retries": 3})
@@ -191,28 +192,59 @@ def run_active_ladders():
         except (json.JSONDecodeError, TypeError):
             continue
 
+
 @shared_task(bind=True, max_retries=5)
 def run_chartink_ladder(self, ladder_id, action):
-    """Avoids infinite while loop using Celery retry"""
+
     try:
         ladder = LadderState.objects.get(id=ladder_id)
-        tick_data = redis_client.get(f"tick:{ladder.symbol.instrument_token}")
+        tick_key = f"tick:{ladder.symbol.instrument_token}"
+        tick_data = redis_client.get(tick_key)
 
+        logger.info(f"\033[96m🔍 Redis tick key: {tick_key}\033[0m")
+        logger.info(f"\033[96m🔁 Retry count: {self.request.retries}\033[0m")
+
+        # ✅ IMPORTANT GUARD
         if not tick_data:
-            # If tick not found, retry after 5 seconds instead of blocking the worker
-            logger.warning(f"Tick missing for {ladder.symbol}, retrying...")
-            raise self.retry(countdown=5)
+            if self.request.retries >= self.max_retries:
+                logger.error(
+                    f"\033[91m❌ Tick never arrived for {ladder.symbol.symbol} "
+                    f"after {self.max_retries} retries. Giving up.\033[0m"
+                )
+                return "FAILED_NO_TICK"
 
-        ltp = json.loads(tick_data)['ltp']
-        logger.info(f"[CHARTINK EXEC] {ladder.symbol.symbol} Action: {action} @ {ltp}")
+            logger.warning(
+                f"\033[93m⚠️ Tick missing for {ladder.symbol.symbol}, retrying...\033[0m"
+            )
+            return self.retry(countdown=5)
+
+        # --- Normal execution ---
+        ltp = json.loads(tick_data)["ltp"]
+
+        logger.info(
+            f"\033[92m[CHARTINK EXEC] {ladder.symbol.symbol} "
+            f"Action={action} @ LTP={ltp}\033[0m"
+        )
 
         if action == "BUY":
             start_buy_ladder(ladder, ltp)
         else:
             start_sell_ladder(ladder, ltp)
-            
+
+        return "SUCCESS"
+
+    except Retry:
+        # ✅ Let Celery handle retry cleanly
+        raise
+
     except LadderState.DoesNotExist:
-        logger.error(f"Ladder {ladder_id} not found")
+        logger.error(
+            f"\033[91m❌ Ladder {ladder_id} not found\033[0m"
+        )
+        return "LADDER_NOT_FOUND"
+
     except Exception as e:
-        logger.error(f"Error in chartink execution: {e}")
-        raise self.retry(exc=e, countdown=10)
+        logger.exception(
+            f"\033[91m❌ REAL unexpected error in chartink execution: {e}\033[0m"
+        )
+        raise
